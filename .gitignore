@@ -1,0 +1,32 @@
+# Environnement virtuel
+env/
+venv/
+.venv/
+.venv-*/
+
+# Données (on ne suit pas les images NIfTI)
+data/raw/
+data/processed/
+*.nii.gz
+*.nii
+
+# Sorties de l'IA
+checkpoints/
+logs/
+*.pth
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
