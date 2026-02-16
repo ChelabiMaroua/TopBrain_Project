@@ -1,5 +1,6 @@
 # Environnement virtuel
 env/
+env_gpu/
 venv/
 .venv/
 .venv-*/

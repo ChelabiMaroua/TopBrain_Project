@@ -137,8 +137,19 @@ def train_one_epoch(model, loader, optimizer, criterion, device) -> float:
 
 
 def run_benchmark(patient_id: str, runs: int, target_size: Tuple[int, int, int]) -> None:
+    # Vérification GPU
+    if not torch.cuda.is_available():
+        print("⚠️  AVERTISSEMENT: GPU non disponible!")
+        print(f"   PyTorch version: {torch.__version__}")
+        print("   Raison probable: PyTorch CPU-only installé")
+        print("   Pour utiliser GPU, réinstallez avec Python 3.12/3.13")
+        print("   Commande: pip install torch --index-url https://download.pytorch.org/whl/cu121\n")
+    
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"--- Exécution sur : {device} ---")
+    if torch.cuda.is_available():
+        print(f"    GPU: {torch.cuda.get_device_name(0)}")
+        print(f"    CUDA version: {torch.version.cuda}")
 
     # 1. Préparation Loaders
     db_pid = resolve_patient_id_in_db(patient_id)

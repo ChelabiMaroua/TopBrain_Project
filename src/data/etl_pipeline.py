@@ -28,11 +28,11 @@ class Config:
     LABEL_REFERENCE_COLLECTION = "label_reference"
     
     # TON CHEMIN DIRECT (Utilisation du préfixe r pour éviter les erreurs de backslash)
-    IMAGE_DIR = r"C:\Users\LENOVO\Desktop\PFE-APP\TopBrain_Project\data\raw\TopBrain_Data_Release_Batches1n2_081425\TopBrain_Data_Release_Batches1n2_081425\imagesTr_topbrain_ct"
+    IMAGE_DIR = r"C:\Study\Maroua\TopBrain_Data_Release_Batches1n2_081425\imagesTr_topbrain_ct" 
     
     # Chemin des labels (souvent dans un dossier frère 'labelsTr_topbrain_ct')
     # À vérifier sur ton disque, j'adapte selon la logique TopCow/TopBrain :
-    LABEL_DIR = r"C:\Users\LENOVO\Desktop\PFE-APP\TopBrain_Project\data\raw\TopBrain_Data_Release_Batches1n2_081425\TopBrain_Data_Release_Batches1n2_081425\labelsTr_topbrain_ct"
+    LABEL_DIR = r"C:\Study\Maroua\TopBrain_Data_Release_Batches1n2_081425\labelsTr_topbrain_ct"
     
     MIN_SEGMENT_VOXELS = 100
     COMPUTE_POLYGONS = True

@@ -58,6 +58,12 @@ class TrainingConfig:
     def __init__(self):
         self.CHECKPOINT_DIR.mkdir(parents=True, exist_ok=True)
         self.LOG_DIR.mkdir(parents=True, exist_ok=True)
+        
+        # Vérification GPU
+        if not torch.cuda.is_available():
+            logger.warning("⚠️  GPU non disponible - entraînement sur CPU sera très lent!")
+            logger.warning(f"   PyTorch version: {torch.__version__}")
+            logger.warning("   Pour GPU: Utilisez Python 3.12/3.13 avec PyTorch CUDA")
 
 
 # ================== MÉTRIQUES DE SEGMENTATION ==================
