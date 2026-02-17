@@ -1,5 +1,10 @@
 """
-Benchmark U-Net 3D : Comparaison Dataset basé sur fichiers vs MongoDB.
+Benchmark U-Net 3D : Comparaison Dataset basé sur fichiers vs MongoDB pré-traité.
+
+MongoDB stocke des volumes pré-traités (déjà resizés, normalisés, labels remappés)
+→ charge directement du binaire en mémoire, pas de parsing NIfTI/resize.
+
+Fichier NIfTI doit parser le format, resizer via scipy, normaliser à chaque chargement.
 """
 
 import argparse
@@ -53,11 +58,13 @@ def resolve_patient_id_in_db(patient_id: str) -> str:
     client = MongoClient(EtlConfig.MONGO_URI)
     collection = client[EtlConfig.DB_NAME][EtlConfig.PATIENTS_COLLECTION]
     
-    # On cherche l'ID sous forme de texte "001" ET sous forme de nombre
+    # On cherche l'ID sous forme de texte "001", "1", et sous forme de nombre
     target_str = str(patient_id).strip()
     target_int = int(target_str) if target_str.isdigit() else None
+    # Aussi essayer avec zéro-padding (ex: "1" -> "001")
+    target_padded = target_str.zfill(3) if target_str.isdigit() else target_str
     
-    query = {"$or": [{"patient_id": target_str}, {"patient_id": target_int}]}
+    query = {"$or": [{"patient_id": target_str}, {"patient_id": target_int}, {"patient_id": target_padded}]}
     doc = collection.find_one(query, {"patient_id": 1})
     client.close()
 
@@ -119,21 +126,33 @@ class LabelFilterDataset(Dataset):
         return img, lbl
 
 
-def train_one_epoch(model, loader, optimizer, criterion, device) -> float:
+def train_one_epoch(model, loader, optimizer, criterion, device) -> Tuple[float, float]:
+    """
+    Entraîne 1 epoch et retourne (temps_chargement_données, temps_total).
+    """
     model.train()
     if device.type == "cuda": torch.cuda.synchronize()
-    start = time.perf_counter()
+    
+    total_start = time.perf_counter()
+    data_load_time = 0.0
 
+    t0 = time.perf_counter()
     for images, labels in loader:
+        data_load_time += time.perf_counter() - t0  # Temps dans le DataLoader (I/O)
+        
         images, labels = images.to(device), labels.to(device)
         optimizer.zero_grad()
         outputs = model(images)
         loss = criterion(outputs, labels)
         loss.backward()
         optimizer.step()
+        
+        t0 = time.perf_counter()
 
     if device.type == "cuda": torch.cuda.synchronize()
-    return time.perf_counter() - start
+    total_time = time.perf_counter() - total_start
+    
+    return data_load_time, total_time
 
 
 def run_benchmark(patient_id: str, runs: int, target_size: Tuple[int, int, int]) -> None:
@@ -154,7 +173,7 @@ def run_benchmark(patient_id: str, runs: int, target_size: Tuple[int, int, int])
     # 1. Préparation Loaders
     db_pid = resolve_patient_id_in_db(patient_id)
     db_dataset = LabelFilterDataset(
-        TopBrainDataset3D(target_size=target_size, patient_ids=[db_pid]), 
+        TopBrainDataset3D(target_size=target_size, patient_ids=[db_pid], use_preprocessed=True), 
         allowed_labels=[0,1,2,3,4,5]
     )
     db_loader = DataLoader(db_dataset, batch_size=1, pin_memory=(device.type == "cuda"))
@@ -166,7 +185,7 @@ def run_benchmark(patient_id: str, runs: int, target_size: Tuple[int, int, int])
     )
     file_loader = DataLoader(file_dataset, batch_size=1, pin_memory=(device.type == "cuda"))
 
-    def run_many(loader: DataLoader, mode_name: str) -> List[float]:
+    def run_many(loader: DataLoader, mode_name: str) -> List[Tuple[float, float]]:
         results = []
         for i in range(runs):
             print(f"   >> Test {i+1}/{runs} [{mode_name}]...")
@@ -174,27 +193,40 @@ def run_benchmark(patient_id: str, runs: int, target_size: Tuple[int, int, int])
             criterion = CombinedLoss()
             optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
             
-            dur = train_one_epoch(model, loader, optimizer, criterion, device)
-            results.append(dur)
-            print(f"      Terminé en {dur:.2f}s")
+            load_t, total_t = train_one_epoch(model, loader, optimizer, criterion, device)
+            results.append((load_t, total_t))
+            print(f"      Data loading: {load_t:.4f}s | Total: {total_t:.4f}s")
             
             # Nettoyage mémoire
             del model, optimizer, criterion
             if device.type == "cuda": torch.cuda.empty_cache()
         return results
 
-    print("\n[Phase 1] MongoDB Dataset")
+    print("\n[Phase 1] MongoDB (pré-traité)")
     db_times = run_many(db_loader, "MongoDB")
 
-    print("\n[Phase 2] File System Dataset")
+    print("\n[Phase 2] File System (NIfTI brut)")
     file_times = run_many(file_loader, "Fichier")
 
     # 3. Synthèse
-    print("\n" + "="*30)
-    print("      RÉSULTATS FINAUX")
-    print("="*30)
-    for name, t in [("MongoDB", db_times), ("Fichier", file_times)]:
-        print(f"{name:10}: {np.mean(t):.4f}s (+/- {np.std(t):.4f}s)")
+    print("\n" + "="*55)
+    print("                RÉSULTATS FINAUX")
+    print("="*55)
+    print(f"{'Source':<20} {'Data Load':>12} {'Total':>12}")
+    print("-"*55)
+    for name, times in [("MongoDB (pré-traité)", db_times), ("Fichier (NIfTI)", file_times)]:
+        load_times = [t[0] for t in times]
+        total_times = [t[1] for t in times]
+        print(f"{name:<20} {np.mean(load_times):>8.4f}s    {np.mean(total_times):>8.4f}s")
+    print("="*55)
+    
+    # Speedup
+    db_avg = np.mean([t[1] for t in db_times])
+    file_avg = np.mean([t[1] for t in file_times])
+    if db_avg > 0:
+        speedup = file_avg / db_avg
+        winner = "MongoDB" if speedup > 1 else "Fichier"
+        print(f"\n🏆 {winner} est {max(speedup, 1/speedup):.2f}x plus rapide")
 
 
 if __name__ == "__main__":

@@ -29,7 +29,8 @@ class TopBrainDataset3D(Dataset):
         target_size: Optional[Tuple[int, int, int]] = None,
         normalize: bool = True,
         cache_in_memory: bool = False,
-        patient_ids: Optional[List[str]] = None
+        patient_ids: Optional[List[str]] = None,
+        use_preprocessed: bool = False
     ):
         """
         Args:
@@ -40,7 +41,14 @@ class TopBrainDataset3D(Dataset):
             target_size: Taille cible (H, W, D) pour redimensionnement
             normalize: Normaliser les images (0-1)
             cache_in_memory: Charger tous les volumes en RAM (attention mémoire!)
+            patient_ids: Liste d'IDs patients à charger (None = tous)
+            use_preprocessed: Si True, charge les volumes pré-traités depuis MongoDB
+                              (bien plus rapide - nécessite d'avoir lancé preprocess_and_store_volumes)
         """
+        self.mongo_uri = mongo_uri
+        self.db_name = db_name
+        self.use_preprocessed = use_preprocessed
+        
         # Connexion MongoDB (ponctuelle) pour récupérer la liste des patients
         client = MongoClient(mongo_uri)
         collection = client[db_name][collection_name]
@@ -107,7 +115,11 @@ class TopBrainDataset3D(Dataset):
         return patient_id
     
     def _load_volume(self, idx: int) -> Tuple[np.ndarray, np.ndarray]:
-        """Charge un volume 3D depuis le disque"""
+        """Charge un volume 3D depuis le disque ou depuis MongoDB pré-traité"""
+        
+        if self.use_preprocessed:
+            return self._load_volume_from_mongo(idx)
+        
         patient_info = self.patient_list[idx]
         
         # Récupération des chemins
@@ -118,6 +130,10 @@ class TopBrainDataset3D(Dataset):
         img = nib.load(img_path).get_fdata()
         lbl = nib.load(lbl_path).get_fdata()
         
+        # Remapper les labels : garder uniquement les classes 0-5 (MCA, ACA, Vertebral, Basilar, PCA)
+        # Tous les labels > 5 sont des structures non ciblées → ramenés à 0 (background)
+        lbl = np.where(lbl > 5, 0, lbl)
+        
         # Redimensionnement si nécessaire
         if self.target_size is not None:
             img = self._resize_volume(img, self.target_size)
@@ -126,6 +142,37 @@ class TopBrainDataset3D(Dataset):
         # Normalisation
         if self.normalize:
             img = self._normalize(img)
+        
+        return img, lbl
+    
+    def _load_volume_from_mongo(self, idx: int) -> Tuple[np.ndarray, np.ndarray]:
+        """
+        Charge un volume pré-traité directement depuis MongoDB (binaire).
+        Pas de parsing NIfTI, pas de resize, pas de normalisation → ultra rapide.
+        """
+        patient_info = self.patient_list[idx]
+        pid = patient_info["patient_id"]
+        
+        size_key = f"{self.target_size[0]}x{self.target_size[1]}x{self.target_size[2]}"
+        
+        client = MongoClient(self.mongo_uri)
+        vol_coll = client[self.db_name]["preprocessed_volumes"]
+        
+        doc = vol_coll.find_one(
+            {"patient_id": pid, "target_size": size_key},
+            {"img_data": 1, "lbl_data": 1, "shape": 1, "img_dtype": 1, "lbl_dtype": 1}
+        )
+        client.close()
+        
+        if doc is None:
+            raise ValueError(
+                f"Volume pré-traité non trouvé pour patient={pid}, size={size_key}. "
+                f"Lancez d'abord: python src/data/etl_pipeline.py"
+            )
+        
+        shape = tuple(doc["shape"])
+        img = np.frombuffer(doc["img_data"], dtype=np.dtype(doc["img_dtype"])).reshape(shape).copy()
+        lbl = np.frombuffer(doc["lbl_data"], dtype=np.dtype(doc["lbl_dtype"])).reshape(shape).copy()
         
         return img, lbl
     

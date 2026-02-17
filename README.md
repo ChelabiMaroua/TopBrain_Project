@@ -83,8 +83,9 @@ env\Scripts\activate     # Windows
 
 #use this instead to use GPU
 py -3.10 -m venv env_gpu
-env_gpu\Scripts\python.exe -m pip install -r requirements.txt
-env_gpu\Scripts\python.exe -m pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
+env_gpu\Scripts\activate     # Windows
+pip install -r requirements.txt
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
 ```
 
 ### 3. Installer les dépendances

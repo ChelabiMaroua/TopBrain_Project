@@ -12,6 +12,7 @@ from tqdm import tqdm
 import logging
 from typing import Dict, List, Optional, Tuple
 from datetime import datetime
+import bson
 
 # Configuration du logging
 logging.basicConfig(
@@ -37,6 +38,15 @@ class Config:
     MIN_SEGMENT_VOXELS = 100
     COMPUTE_POLYGONS = True
     SAMPLE_SLICES = 5
+    
+    # Collection pour volumes pré-traités (prêts pour le GPU)
+    VOLUMES_COLLECTION = "preprocessed_volumes"
+    
+    # Taille cible par défaut pour le pré-traitement
+    DEFAULT_TARGET_SIZE = (128, 128, 64)
+    
+    # Nombre de classes de segmentation (0=background + 5 artères)
+    NUM_CLASSES = 6
 # ================== CONNEXION MONGODB ==================
 def get_db_connection():
     """Établit une connexion MongoDB avec gestion d'erreurs"""
@@ -275,7 +285,123 @@ def run_etl_pipeline(limit: Optional[int] = None):
     logger.info(f"📊 Total segments extraits : {stats['total_segments']}")
     logger.info(f"{'='*50}\n")
 
+# ================== PRÉ-TRAITEMENT ET STOCKAGE VOLUMES ==================
+def _resize_volume(volume: np.ndarray, target_size: Tuple[int, int, int], is_label: bool = False) -> np.ndarray:
+    """Redimensionne un volume 3D"""
+    from scipy.ndimage import zoom
+    zoom_factors = [target_size[i] / volume.shape[i] for i in range(3)]
+    order = 0 if is_label else 1
+    return zoom(volume, zoom_factors, order=order)
+
+
+def _normalize_volume(img: np.ndarray) -> np.ndarray:
+    """Normalise un volume dans [0, 1]"""
+    img_min, img_max = img.min(), img.max()
+    if img_max - img_min > 0:
+        return (img - img_min) / (img_max - img_min)
+    return img
+
+
+def preprocess_and_store_volumes(
+    target_size: Tuple[int, int, int] = None,
+    limit: Optional[int] = None
+):
+    """
+    Pré-traite les volumes (resize, normalize, remap labels) et les stocke
+    en binaire dans MongoDB pour un chargement ultra-rapide.
+    
+    Args:
+        target_size: Taille cible (H, W, D). Défaut = Config.DEFAULT_TARGET_SIZE
+        limit: Nombre maximum de patients à traiter
+    """
+    if target_size is None:
+        target_size = Config.DEFAULT_TARGET_SIZE
+    
+    db = get_db_connection()
+    
+    # Index pour recherche rapide
+    vol_coll = db[Config.VOLUMES_COLLECTION]
+    vol_coll.create_index([("patient_id", 1), ("target_size", 1)], unique=True)
+    
+    # Récupérer tous les patients depuis la collection principale
+    patients = list(db[Config.PATIENTS_COLLECTION].find({}, {"patient_id": 1, "metadata": 1}))
+    
+    if limit:
+        patients = patients[:limit]
+    
+    logger.info(f"📦 Pré-traitement de {len(patients)} volumes → taille {target_size}")
+    
+    size_key = f"{target_size[0]}x{target_size[1]}x{target_size[2]}"
+    stats = {"success": 0, "failed": 0, "skipped": 0}
+    
+    for patient in tqdm(patients, desc="Pré-traitement volumes"):
+        pid = patient["patient_id"]
+        
+        try:
+            # Vérifier si déjà pré-traité
+            existing = vol_coll.find_one({"patient_id": pid, "target_size": size_key})
+            if existing:
+                stats["skipped"] += 1
+                continue
+            
+            img_path = patient["metadata"]["img_path"]
+            lbl_path = patient["metadata"]["lbl_path"]
+            
+            # Charger les volumes NIfTI
+            img = nib.load(img_path).get_fdata()
+            lbl = nib.load(lbl_path).get_fdata()
+            
+            # Remapper labels > 5 → 0 (background)
+            lbl = np.where(lbl > 5, 0, lbl).astype(np.uint8)
+            
+            # Redimensionner
+            img = _resize_volume(img, target_size, is_label=False)
+            lbl = _resize_volume(lbl, target_size, is_label=True)
+            
+            # Normaliser l'image
+            img = _normalize_volume(img).astype(np.float32)
+            
+            # Sérialiser en binaire (compact)
+            img_bytes = bson.Binary(img.tobytes())
+            lbl_bytes = bson.Binary(lbl.tobytes())
+            
+            # Stocker dans MongoDB
+            doc = {
+                "patient_id": pid,
+                "target_size": size_key,
+                "shape": list(target_size),
+                "img_dtype": str(img.dtype),
+                "lbl_dtype": str(lbl.dtype),
+                "img_data": img_bytes,
+                "lbl_data": lbl_bytes,
+                "preprocessed_at": datetime.now().isoformat()
+            }
+            
+            vol_coll.update_one(
+                {"patient_id": pid, "target_size": size_key},
+                {"$set": doc},
+                upsert=True
+            )
+            
+            stats["success"] += 1
+            
+        except Exception as e:
+            logger.error(f"✗ Erreur pré-traitement {pid}: {e}")
+            stats["failed"] += 1
+    
+    logger.info(f"\n{'='*50}")
+    logger.info(f"PRÉ-TRAITEMENT TERMINÉ")
+    logger.info(f"{'='*50}")
+    logger.info(f"✓ Volumes traités : {stats['success']}")
+    logger.info(f"⏭ Déjà existants : {stats['skipped']}")
+    logger.info(f"✗ Échecs : {stats['failed']}")
+    logger.info(f"{'='*50}\n")
+
+
 # ================== EXÉCUTION ==================
 if __name__ == "__main__":
     # Traiter tous les patients (ou limiter avec limit=5 pour tests)
     run_etl_pipeline(limit=None)
+    
+    # Pré-traiter et stocker les volumes pour chargement rapide
+    preprocess_and_store_volumes()
