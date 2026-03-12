@@ -1,37 +1,27 @@
 """
 benchmark.py — Compare Three UNet3D Data-Loading Pipelines
 ===========================================================
-Runs a fair, reproducible benchmark across all three pipelines
-(Files, MongoDB Polygons, MongoDB Binary) on the same patient.
+Runs a fair, reproducible benchmark across all three pipelines.
 
-All output graphs are saved to the  Graphs/  folder (created automatically).
-JSON results are also exported there for use by graph_comparison.py.
-
-Improvements over v1
----------------------
-1. Multi-workers automatically tested (0, 2, 4 workers).
-2. One-time MongoDB population cost measured separately.
-3. Segmentation quality metrics: Dice score + IoU per class.
-4. Full statistics: mean +/- std + 95% CI + median over >= 5 runs.
-5. Results exported to JSON for graph_comparison.py.
-6. Rotative run order eliminates position bias.
-7. OS cache flushed between runs for fair I/O measurement.
+Nouveautés v2
+-------------
+- Métriques calculées par moyenne de slices axiales (pas slice par slice).
+- Score combiné = (Dice_fg + IoU_fg) / 2.
+- Data augmentation activable avec --augment.
+- Split 27 patients train/val/test avec --train-ratio et --val-ratio.
 
 Usage
 -----
-# Quick benchmark (5 runs, default workers):
+# Benchmark rapide (5 runs) :
 python benchmark.py --patient-id 001 --target-size 128 128 64 --runs 5
 
-# Full benchmark with workers test and Dice metrics:
-python benchmark.py --patient-id 001 --target-size 128 128 64 --runs 5 \\
-    --test-workers --metric-epochs 3 --flush-cache
+# Avec métriques segmentation et augmentation :
+python benchmark.py --patient-id 001 --target-size 128 128 64 --runs 5 \
+    --metric-epochs 3 --augment --flush-cache
 
-# Full benchmark including MongoDB population timing:
-python benchmark.py --patient-id 001 --target-size 128 128 64 --runs 5 \\
-    --test-workers --metric-epochs 3 --measure-population --flush-cache
-
-# Test a single pipeline:
-python benchmark.py --patient-id 001 --target-size 128 128 64 --skip-poly --skip-binary
+# Split 27 patients + test final :
+python benchmark.py --all-patients --target-size 128 128 64 --runs 3 \
+    --metric-epochs 5 --augment --train-ratio 0.70 --val-ratio 0.15
 """
 
 import argparse
@@ -52,7 +42,6 @@ import unet_files
 import unet_mongo_binary
 import unet_mongo_polygons
 
-# All generated graphs and JSON results go here
 GRAPHS_DIR = "Graphs"
 
 
@@ -61,7 +50,6 @@ GRAPHS_DIR = "Graphs"
 # ---------------------------------------------------------------------------
 
 def _cache_thrash(size_mb: int = 512) -> None:
-    """Evict OS file cache by allocating and reading a large buffer."""
     try:
         chunk = b"\x00" * (size_mb * 1024 * 1024)
         _ = sum(chunk[i] for i in range(0, len(chunk), 4096))
@@ -99,7 +87,6 @@ def _flush_cache_linux() -> bool:
 
 
 def flush_os_cache(verbose: bool = True) -> None:
-    """Flush the OS file cache using the best method for the current platform."""
     system = platform.system()
     if verbose:
         print(f"    [cache] Flushing OS cache ({system}) ...", end=" ", flush=True)
@@ -113,7 +100,7 @@ def flush_os_cache(verbose: bool = True) -> None:
             ok = False
         gc.collect()
         if verbose:
-            print("OK" if ok else "partial (insufficient privileges — cache thrashing used)")
+            print("OK" if ok else "partial (cache thrashing used)")
     except Exception as exc:
         if verbose:
             print(f"error: {exc}")
@@ -121,7 +108,6 @@ def flush_os_cache(verbose: bool = True) -> None:
 
 
 def _request_high_priority() -> None:
-    """Request elevated OS scheduling priority to reduce timing jitter."""
     try:
         if platform.system() == "Windows":
             p = ctypes.windll.kernel32.GetCurrentProcess()
@@ -154,76 +140,24 @@ def detect_device() -> torch.device:
 
 
 # ---------------------------------------------------------------------------
-# Segmentation metrics: Dice and IoU per class
+# Slice-averaged Dice + IoU  (delegate to unet_files)
 # ---------------------------------------------------------------------------
-
-def compute_dice_iou(
-    preds:       torch.Tensor,
-    targets:     torch.Tensor,
-    num_classes: int   = 6,
-    smooth:      float = 1e-6,
-) -> Tuple[List[float], List[float]]:
-    """
-    Compute per-class Dice and IoU scores.
-    preds   : (B, C, H, W, D) — raw logits
-    targets : (B, H, W, D)    — integer class labels
-    Returns (dice_per_class, iou_per_class), each a list of length num_classes.
-    """
-    pred_classes = preds.argmax(dim=1)
-    dice_scores: List[float] = []
-    iou_scores:  List[float] = []
-
-    for c in range(num_classes):
-        pred_c   = (pred_classes == c).float()
-        target_c = (targets == c).float()
-        inter    = (pred_c * target_c).sum().item()
-        p_sum    = pred_c.sum().item()
-        t_sum    = target_c.sum().item()
-        dice_scores.append((2 * inter + smooth) / (p_sum + t_sum + smooth))
-        iou_scores.append((inter + smooth) / (p_sum + t_sum - inter + smooth))
-
-    return dice_scores, iou_scores
-
 
 def evaluate_segmentation(
     model:       nn.Module,
     loader:      torch.utils.data.DataLoader,
     device:      torch.device,
-    num_classes: int = 6,
+    num_classes: int = unet_files.NUM_CLASSES,
 ) -> Dict[str, float]:
     """
-    Run a full evaluation pass and return:
-      - dice_class_0 .. dice_class_5
-      - iou_class_0  .. iou_class_5
-      - mean_dice_fg  (foreground classes 1-5, background excluded)
-      - mean_iou_fg
+    Wrapper around unet_files.evaluate_segmentation.
+    Returns slice-averaged Dice, IoU, and combined score per foreground class.
     """
-    model.eval()
-    all_dice = [[] for _ in range(num_classes)]
-    all_iou  = [[] for _ in range(num_classes)]
-
-    with torch.no_grad():
-        for batch in loader:
-            imgs, lbls = batch[0].to(device), batch[1].to(device)
-            dice, iou  = compute_dice_iou(model(imgs), lbls, num_classes)
-            for c in range(num_classes):
-                all_dice[c].append(dice[c])
-                all_iou[c].append(iou[c])
-
-    metrics: Dict[str, float] = {}
-    for c in range(num_classes):
-        metrics[f"dice_class_{c}"] = float(np.mean(all_dice[c]))
-        metrics[f"iou_class_{c}"]  = float(np.mean(all_iou[c]))
-
-    fg_dice = [metrics[f"dice_class_{c}"] for c in range(1, num_classes)]
-    fg_iou  = [metrics[f"iou_class_{c}"]  for c in range(1, num_classes)]
-    metrics["mean_dice_fg"] = float(np.mean(fg_dice))
-    metrics["mean_iou_fg"]  = float(np.mean(fg_iou))
-    return metrics
+    return unet_files.evaluate_segmentation(model, loader, device, num_classes)
 
 
 # ---------------------------------------------------------------------------
-# Population timing — hidden one-time cost of the MongoDB pipelines
+# Population timing
 # ---------------------------------------------------------------------------
 
 def measure_population_time(
@@ -238,14 +172,6 @@ def measure_population_time(
     is_binary:        bool = False,
     is_polygon:       bool = False,
 ) -> Optional[float]:
-    """
-    Measure the one-time MongoDB population cost.
-    DROPS the collection, then re-creates it from scratch.
-    Returns elapsed seconds, or None for the Files pipeline.
-
-    WARNING: this permanently deletes the existing collection data.
-             Only use in a development / benchmarking environment.
-    """
     if not (is_binary or is_polygon):
         return None
     try:
@@ -291,24 +217,16 @@ def train_one_epoch_timed(
     criterion: nn.Module,
     device:    torch.device,
 ) -> Dict[str, float]:
-    """
-    Run one training epoch and return fine-grained timing breakdown:
-      io_preprocess_time    — time inside __getitem__ (I/O + resize + normalize)
-      dataloader_overhead   — collation / queue overhead in DataLoader
-      gpu_transfer_time     — .to(device) cost
-      forward_backward_time — forward pass + loss + backward + optimizer step
-      total_epoch_time      — wall-clock time for the full epoch
-    """
     model.train()
     if device.type == "cuda":
         torch.cuda.synchronize()
 
-    io_time   = 0.0
-    dl_oh     = 0.0
-    gpu_time  = 0.0
-    fb_time   = 0.0
-    t_epoch   = time.perf_counter()
-    it        = iter(loader)
+    io_time  = 0.0
+    dl_oh    = 0.0
+    gpu_time = 0.0
+    fb_time  = 0.0
+    t_epoch  = time.perf_counter()
+    it       = iter(loader)
 
     for _ in range(len(loader)):
         t0         = time.perf_counter()
@@ -360,13 +278,6 @@ def run_single(
     run_label:     str = "",
     metric_epochs: int = 0,
 ) -> Dict[str, float]:
-    """
-    Execute one complete benchmark run:
-      1. (Optional) flush OS cache.
-      2. Build model + loader.
-      3. Run one timed training epoch.
-      4. (Optional) train metric_epochs more epochs, then compute Dice/IoU.
-    """
     if flush_cache:
         flush_os_cache(verbose=True)
     else:
@@ -387,17 +298,20 @@ def run_single(
     metrics = train_one_epoch_timed(model, loader, optimizer, criterion, device)
 
     if metric_epochs > 0:
-        print(f"      -> Training {metric_epochs} epoch(s) for Dice/IoU ...")
+        print(f"      -> Training {metric_epochs} epoch(s) for Dice/IoU (slice-avg) ...")
         for _ in range(metric_epochs):
             for batch in loader:
                 imgs, lbls = batch[0].to(device), batch[1].to(device)
                 optimizer.zero_grad()
                 criterion(model(imgs), lbls).backward()
                 optimizer.step()
+
+        # Slice-averaged evaluation
         seg = evaluate_segmentation(model, loader, device)
         metrics.update(seg)
         print(f"      -> mean Dice (fg): {seg['mean_dice_fg']:.4f}  "
-              f"mean IoU (fg): {seg['mean_iou_fg']:.4f}")
+              f"mean IoU (fg): {seg['mean_iou_fg']:.4f}  "
+              f"combined: {seg['combined_score']:.4f}")
 
     del model, criterion, optimizer, loader
     gc.collect()
@@ -418,13 +332,6 @@ def run_benchmark_rotative(
     flush_cache:   bool,
     metric_epochs: int = 0,
 ) -> Tuple[Dict[str, List[Dict[str, float]]], Dict[str, float]]:
-    """
-    Rotative strategy — each pipeline is placed in position 1 (cold start)
-    an equal number of times, eliminating position bias:
-      Run 1: A -> B -> C
-      Run 2: B -> C -> A
-      Run 3: C -> A -> B
-    """
     active   = [(n, fn) for n, fn, enabled in pipeline_configs if enabled]
     n_active = len(active)
     all_results: Dict[str, List] = {n: [] for n, _ in active}
@@ -442,10 +349,10 @@ def run_benchmark_rotative(
                             run_label=label, metric_epochs=metric_epochs)
             totals[name] += time.perf_counter() - t0
             all_results[name].append(m)
-            dice_str = (f"  Dice={m['mean_dice_fg']:.4f}" if "mean_dice_fg" in m else "")
+            comb_str = (f"  Combined={m['combined_score']:.4f}" if "combined_score" in m else "")
             print(f"      -> epoch: {m['total_epoch_time']:.3f} s  "
                   f"(I/O: {m['io_preprocess_time']:.3f} s  "
-                  f"F+B: {m['forward_backward_time']:.3f} s){dice_str}")
+                  f"F+B: {m['forward_backward_time']:.3f} s){comb_str}")
 
     return all_results, totals
 
@@ -455,7 +362,6 @@ def run_benchmark_rotative(
 # ---------------------------------------------------------------------------
 
 def stats(results: List[Dict[str, float]]) -> Dict[str, Dict[str, float]]:
-    """Compute mean, std, 95% CI, median, min, max for every metric."""
     if not results:
         return {}
     out = {}
@@ -485,7 +391,6 @@ def run_workers_benchmark(
     workers_list: List[int],
     flush_cache:  bool,
 ) -> Dict[str, Dict[int, float]]:
-    """Test each pipeline with multiple DataLoader worker counts."""
     results: Dict[str, Dict[int, float]] = {}
     print("\n  == MULTI-WORKERS TEST ==")
     print(f"     Workers: {workers_list}")
@@ -527,13 +432,19 @@ TIMING_METRICS = [
     ("total_epoch_time",      "** TOTAL Epoch         "),
 ]
 SEGMENTATION_METRICS = [
-    ("mean_dice_fg",  "Mean Dice (fg, cls 1-5)"),
-    ("mean_iou_fg",   "Mean IoU  (fg, cls 1-5)"),
-    ("dice_class_1",  "Dice  class 1          "),
-    ("dice_class_2",  "Dice  class 2          "),
-    ("dice_class_3",  "Dice  class 3          "),
-    ("dice_class_4",  "Dice  class 4          "),
-    ("dice_class_5",  "Dice  class 5          "),
+    ("mean_dice_fg",    "Mean Dice (fg, cls 1-5)  "),
+    ("mean_iou_fg",     "Mean IoU  (fg, cls 1-5)  "),
+    ("combined_score",  "** Combined (Dice+IoU)/2  "),   # ← nouveau
+    ("dice_class_1",    "Dice  class 1             "),
+    ("dice_class_2",    "Dice  class 2             "),
+    ("dice_class_3",    "Dice  class 3             "),
+    ("dice_class_4",    "Dice  class 4             "),
+    ("dice_class_5",    "Dice  class 5             "),
+    ("iou_class_1",     "IoU   class 1             "),
+    ("iou_class_2",     "IoU   class 2             "),
+    ("iou_class_3",     "IoU   class 3             "),
+    ("iou_class_4",     "IoU   class 4             "),
+    ("iou_class_5",     "IoU   class 5             "),
 ]
 
 
@@ -551,16 +462,17 @@ def print_results(
     population_times: Optional[Dict] = None,
     workers_results:  Optional[Dict] = None,
 ) -> None:
-    W_M, W_C = 30, 30
+    W_M, W_C = 30, 32
     widths  = [W_M] + [W_C] * len(pipeline_names)
     sep     = _sep(widths)
     total_w = sum(widths) + len(widths) + 1
-    has_dice = any("mean_dice_fg" in r for res in all_results.values() for r in res)
-    note = "cache flushed" if flush_cache else "WARNING: cache NOT flushed (I/O may be biased)"
+    has_seg = any("combined_score" in r for res in all_results.values() for r in res)
+    note    = "cache flushed" if flush_cache else "WARNING: cache NOT flushed"
 
     print("\n" + "=" * total_w)
     print(f"  BENCHMARK RESULTS — {str(device).upper()}  |  runs: {runs}  |  "
           f"ROTATIVE  |  {note}")
+    print(f"  Métriques segmentation : SLICE-AVERAGED Dice & IoU")
     print("=" * total_w)
 
     if population_times:
@@ -574,7 +486,7 @@ def print_results(
             row.append("N/A (no DB)" if pt is None else f"{pt:.2f} s")
         print(_row(row, widths))
         print(sep)
-        print("  -> This cost is paid ONCE and amortized across all subsequent epochs.\n")
+        print("  -> Cost paid ONCE — amortized across all epochs.\n")
 
     for table_name, show_ci in [("MEDIAN", False), ("MEAN +/- STD  |  95% CI", True)]:
         print(f"\n  {table_name} over {runs} runs")
@@ -589,15 +501,17 @@ def print_results(
                     row_cells.append("N/A")
                 elif show_ci:
                     v = s[key]
-                    row_cells.append(f"{v['mean']:.3f}+/-{v['std']:.3f}s [{v['ci95_lo']:.3f};{v['ci95_hi']:.3f}]")
+                    row_cells.append(f"{v['mean']:.3f}+/-{v['std']:.3f}s "
+                                     f"[{v['ci95_lo']:.3f};{v['ci95_hi']:.3f}]")
                 else:
                     row_cells.append(f"{s[key]['median']:7.3f} s")
             print(_row(row_cells, widths))
             if label.startswith("**"):
                 print(sep)
 
-    if has_dice:
-        print(f"\n  SEGMENTATION QUALITY  (all pipelines should converge to similar scores)")
+    if has_seg:
+        print(f"\n  SEGMENTATION QUALITY  — slice-averaged metrics")
+        print(f"  (** Combined = (Dice_fg + IoU_fg) / 2  — principal metric)")
         print(sep)
         print(_row(["Metric  (segmentation)"] + pipeline_names, widths))
         print(sep)
@@ -609,40 +523,47 @@ def print_results(
                     f"{s[key]['mean']:.4f}+/-{s[key]['std']:.4f}" if s and key in s else "N/A"
                 )
             print(_row(row_cells, widths))
+            if label.startswith("**"):
+                print(sep)
         print(sep)
 
     if workers_results:
         print(f"\n  MULTI-WORKERS IMPACT")
-        all_nw  = sorted({nw for v in workers_results.values() for nw in v})
-        w_w = [30] + [16] * len(all_nw)
-        w_s = _sep(w_w)
+        all_nw = sorted({nw for v in workers_results.values() for nw in v})
+        w_w    = [30] + [16] * len(all_nw)
+        w_s    = _sep(w_w)
         print(w_s)
         print(_row(["Pipeline"] + [f"workers={nw}" for nw in all_nw], w_w))
         print(w_s)
         for n, nd in workers_results.items():
-            row = [n] + [f"{nd.get(nw, float('nan')):.3f} s"
-                         if not np.isnan(nd.get(nw, float("nan"))) else "ERR"
-                         for nw in all_nw]
+            row = [n] + [
+                f"{nd.get(nw, float('nan')):.3f} s"
+                if not np.isnan(nd.get(nw, float("nan"))) else "ERR"
+                for nw in all_nw
+            ]
             print(_row(row, w_w))
         print(w_s)
 
     print("\n  FINAL RANKING (median total epoch time)")
     print("  " + "-" * (total_w - 2))
-    ranked = sorted(pipeline_names,
-                    key=lambda n: stats(all_results[n]).get("total_epoch_time", {}).get("median", 1e9))
+    ranked = sorted(
+        pipeline_names,
+        key=lambda n: stats(all_results[n]).get("total_epoch_time", {}).get("median", 1e9),
+    )
     for i, n in enumerate(ranked):
-        s = stats(all_results[n])
-        med, std = s["total_epoch_time"]["median"], s["total_epoch_time"]["std"]
+        s   = stats(all_results[n])
+        med = s["total_epoch_time"]["median"]
+        std = s["total_epoch_time"]["std"]
         io_ = s["io_preprocess_time"]["median"]
-        dice_str = f"  Dice={s['mean_dice_fg']['mean']:.4f}" if "mean_dice_fg" in s else ""
+        comb_str = (f"  Combined={s['combined_score']['mean']:.4f}"
+                    if "combined_score" in s else "")
         medal = ["[1st]", "[2nd]", "[3rd]"][i] if i < 3 else "     "
-        print(f"  {medal}  {n:<30}  epoch: {med:.3f} s +/- {std:.3f}  (I/O: {io_:.3f} s){dice_str}")
+        print(f"  {medal}  {n:<30}  epoch: {med:.3f} s +/- {std:.3f}  "
+              f"(I/O: {io_:.3f} s){comb_str}")
 
-    if flush_cache:
-        print("\n  [OK] Benchmark with cache flushing — results reliable.\n")
-    else:
-        print("\n  [!!] WARNING: no cache flush — I/O results may be biased.\n"
-              "       Re-run with --flush-cache for reliable I/O measurements.\n")
+    note_str = ("[OK] Cache flush — results reliable.\n" if flush_cache
+                else "[!!] No cache flush — I/O may be biased. Use --flush-cache.\n")
+    print(f"\n  {note_str}")
 
 
 # ---------------------------------------------------------------------------
@@ -656,14 +577,13 @@ def export_results_json(
     workers_results:  Optional[Dict],
     output_path:      str,
 ) -> None:
-    """Export all results to JSON for graph_comparison.py."""
     os.makedirs(os.path.dirname(output_path) or ".", exist_ok=True)
     export = {
         "pipeline_names": pipeline_names,
         "runs":   {n: all_results[n] for n in pipeline_names},
         "stats":  {n: stats(all_results[n]) for n in pipeline_names},
         "population_times": population_times or {},
-        "workers_results":  {
+        "workers_results": {
             n: {str(k): v for k, v in d.items()}
             for n, d in (workers_results or {}).items()
         },
@@ -683,15 +603,27 @@ def main() -> None:
         description="Benchmark three UNet3D data-loading pipelines.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
-    parser.add_argument("--patient-id",   required=True)
-    parser.add_argument("--runs",         type=int, default=5)
-    parser.add_argument("--flush-cache",  action="store_true")
-    parser.add_argument("--batch-size",   type=int, default=1)
-    parser.add_argument("--num-workers",  type=int, default=0)
-    parser.add_argument("--target-size",  nargs=3, type=int, default=None, metavar=("H","W","D"))
-    parser.add_argument("--metric-epochs",      type=int, default=0)
-    parser.add_argument("--test-workers",        action="store_true")
-    parser.add_argument("--measure-population",  action="store_true")
+    # Patient selection — either one ID or all patients with 3-way split
+    grp = parser.add_mutually_exclusive_group(required=True)
+    grp.add_argument("--patient-id",  help="Single patient ID for quick test")
+    grp.add_argument("--all-patients", action="store_true",
+                     help="Use all patients with train/val/test split")
+
+    parser.add_argument("--runs",            type=int, default=5)
+    parser.add_argument("--flush-cache",     action="store_true")
+    parser.add_argument("--batch-size",      type=int, default=1)
+    parser.add_argument("--num-workers",     type=int, default=0)
+    parser.add_argument("--target-size",     nargs=3, type=int, default=None,
+                        metavar=("H", "W", "D"))
+    parser.add_argument("--metric-epochs",   type=int, default=0)
+    parser.add_argument("--test-workers",    action="store_true")
+    parser.add_argument("--measure-population", action="store_true")
+    parser.add_argument("--augment",         action="store_true",
+                        help="Enable data augmentation on the training set")
+    parser.add_argument("--train-ratio",     type=float, default=0.70,
+                        help="Fraction of patients for training (default 0.70)")
+    parser.add_argument("--val-ratio",       type=float, default=0.15,
+                        help="Fraction for validation (test = rest)")
     parser.add_argument("--image-dir",        default=unet_files.DEFAULT_IMAGE_DIR)
     parser.add_argument("--label-dir",        default=unet_files.DEFAULT_LABEL_DIR)
     parser.add_argument("--source-image-dir", default=unet_files.DEFAULT_IMAGE_DIR)
@@ -717,33 +649,56 @@ def main() -> None:
     print("-" * 70)
     device = detect_device()
 
+    # --- Resolve patient list ---
+    all_items = unet_files.list_patient_files(args.image_dir, args.label_dir)
+    if args.all_patients:
+        train_items, val_items, test_items = unet_files.split_patients(
+            all_items,
+            train_ratio=args.train_ratio,
+            val_ratio=args.val_ratio,
+        )
+        benchmark_patient_ids = [it["patient_id"] for it in all_items]
+    else:
+        benchmark_patient_ids = [args.patient_id]
+        train_items = unet_files.filter_items(all_items, [args.patient_id])
+        val_items, test_items = [], []
+
     print("-" * 70)
     print("  CONFIGURATION")
     print("-" * 70)
-    print(f"  Patient         : {args.patient_id}")
-    print(f"  Runs            : {args.runs}  ({'reliable' if args.runs >= 5 else 'low — use >= 5'} CI)")
+    print(f"  Patients        : {len(benchmark_patient_ids)}"
+          f"  (train={len(train_items)} val={len(val_items)} test={len(test_items)})")
+    print(f"  Runs            : {args.runs}")
     print(f"  Batch size      : {args.batch_size}")
     print(f"  Default workers : {args.num_workers}")
-    print(f"  Test workers    : {'YES' if args.test_workers else 'NO'}")
-    print(f"  Metric epochs   : {args.metric_epochs}")
-    print(f"  Measure pop.    : {'YES (WARNING: drops collection!)' if args.measure_population else 'NO'}")
+    print(f"  Metric epochs   : {args.metric_epochs}  (slice-averaged Dice + IoU + Combined)")
+    print(f"  Augmentation    : {'YES' if args.augment else 'NO'}")
+    print(f"  Flush cache     : {'YES' if args.flush_cache else 'NO (may bias I/O)'}")
     if target_size:
         print(f"  Volume resize   : {target_size[0]}x{target_size[1]}x{target_size[2]}")
-    print(f"  Flush cache     : {'YES' if args.flush_cache else 'NO (may bias I/O)'}")
     print(f"  Output dir      : {GRAPHS_DIR}/\n")
 
+    # --- Loader factories ---
     def file_loader_fn(nw=args.num_workers):
-        items = unet_files.list_patient_files(args.image_dir, args.label_dir)
-        items = unet_files.filter_items(items, [args.patient_id])
-        loader, _ = unet_files.create_dataloaders(
-            items=items, batch_size=args.batch_size, num_workers=nw,
-            train_split=1.0, target_size=target_size, normalize=True, seed=42,
+        items = train_items if train_items else unet_files.filter_items(
+            all_items, benchmark_patient_ids
+        )
+        loader, _, _ = unet_files.create_dataloaders(
+            items=items,
+            batch_size=args.batch_size,
+            num_workers=nw,
+            train_split=1.0,
+            target_size=target_size,
+            normalize=True,
+            seed=42,
+            augment=args.augment,
+            use_three_way_split=False,
         )
         return loader
 
     def polygon_loader_fn(nw=args.num_workers):
         loader, _ = unet_mongo_polygons.create_dataloaders(
-            patient_ids=[args.patient_id],
+            patient_ids=benchmark_patient_ids,
             batch_size=args.batch_size, num_workers=nw,
             train_split=1.0, target_size=target_size, normalize=True, seed=42,
             mongo_uri=args.mongo_uri, db_name=args.db_name,
@@ -755,7 +710,7 @@ def main() -> None:
 
     def binary_loader_fn(nw=args.num_workers):
         loader, _ = unet_mongo_binary.create_dataloaders(
-            patient_ids=[args.patient_id],
+            patient_ids=benchmark_patient_ids,
             batch_size=args.batch_size, num_workers=nw,
             train_split=1.0, target_size=target_size, seed=42,
             mongo_uri=args.mongo_uri, db_name=args.db_name,
@@ -785,15 +740,19 @@ def main() -> None:
             pop_times["Mongo Polygons"] = measure_population_time(
                 "Mongo Polygons", mongo_uri=args.mongo_uri, db_name=args.db_name,
                 collection_name=args.poly_collection,
-                source_image_dir=args.source_image_dir, source_label_dir=args.source_label_dir,
-                target_size=target_size, patient_ids=[args.patient_id], is_polygon=True,
+                source_image_dir=args.source_image_dir,
+                source_label_dir=args.source_label_dir,
+                target_size=target_size,
+                patient_ids=benchmark_patient_ids, is_polygon=True,
             )
         if not args.skip_binary:
             pop_times["Mongo Binary"] = measure_population_time(
                 "Mongo Binary", mongo_uri=args.mongo_uri, db_name=args.db_name,
                 collection_name=args.binary_collection,
-                source_image_dir=args.source_image_dir, source_label_dir=args.source_label_dir,
-                target_size=target_size, patient_ids=[args.patient_id], is_binary=True,
+                source_image_dir=args.source_image_dir,
+                source_label_dir=args.source_label_dir,
+                target_size=target_size,
+                patient_ids=benchmark_patient_ids, is_binary=True,
             )
 
     print("-" * 70)
@@ -831,6 +790,38 @@ def main() -> None:
             population_times=pop_times if args.measure_population else None,
             workers_results=workers_results, output_path=args.export_json,
         )
+
+        # --- Final test evaluation (Files pipeline only, if 3-way split) ---
+        if test_items and not args.skip_files:
+            print("\n" + "=" * 70)
+            print("  ÉVALUATION FINALE — TEST SET (patients jamais vus)")
+            print("=" * 70)
+            test_loader = unet_files.create_dataloaders(
+                items=test_items,
+                batch_size=args.batch_size, num_workers=args.num_workers,
+                train_split=1.0, target_size=target_size,
+                normalize=True, seed=42, augment=False,
+                use_three_way_split=False,
+            )[0]
+            # Quick re-train on train set for a proper model
+            model = model_fn().to(device)
+            crit  = nn.CrossEntropyLoss()
+            opt   = torch.optim.Adam(model.parameters(), lr=1e-4)
+            train_loader_final = file_loader_fn()
+            for _ in range(max(1, args.metric_epochs)):
+                for batch in train_loader_final:
+                    imgs, lbls = batch[0].to(device), batch[1].to(device)
+                    opt.zero_grad()
+                    crit(model(imgs), lbls).backward()
+                    opt.step()
+            seg_test = unet_files.evaluate_segmentation(model, test_loader, device)
+            print(f"  Patients test : {[it['patient_id'] for it in test_items]}")
+            print(f"  Mean Dice  (fg)  : {seg_test['mean_dice_fg']:.4f}")
+            print(f"  Mean IoU   (fg)  : {seg_test['mean_iou_fg']:.4f}")
+            print(f"  Combined score   : {seg_test['combined_score']:.4f}")
+            for c in range(1, unet_files.NUM_CLASSES):
+                print(f"    class {c} — Dice={seg_test[f'dice_class_{c}']:.4f}"
+                      f"  IoU={seg_test[f'iou_class_{c}']:.4f}")
     else:
         print("  No results to display.")
 
