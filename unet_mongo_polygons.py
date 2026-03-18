@@ -28,28 +28,21 @@ import nibabel as nib
 import numpy as np
 import torch
 import torch.nn as nn
+from dotenv import load_dotenv
 from pymongo import MongoClient
 from pymongo.errors import ServerSelectionTimeoutError
 from torch.utils.data import DataLoader, Dataset
 
+load_dotenv()
+
 # ---------------------------------------------------------------------------
-# Configuration
+# Configuration (loaded from .env)
 # ---------------------------------------------------------------------------
-MONGO_URI           = "mongodb://localhost:27017/"
-DB_NAME             = "TopBrain_DB"
+MONGO_URI           = os.getenv("MONGO_URI", "mongodb://localhost:27017/")
+DB_NAME             = os.getenv("DB_NAME", "TopBrain_DB")
 PATIENTS_COLLECTION = "PolygonPatients"
-SOURCE_IMAGE_DIR = (
-    "C:\\Users\\LENOVO\\Desktop\\PFE\\data\\raw"
-    "\\TopBrain_Data_Release_Batches1n2_081425"
-    "\\TopBrain_Data_Release_Batches1n2_081425"
-    "\\imagesTr_topbrain_ct"
-)
-SOURCE_LABEL_DIR = (
-    "C:\\Users\\LENOVO\\Desktop\\PFE\\data\\raw"
-    "\\TopBrain_Data_Release_Batches1n2_081425"
-    "\\TopBrain_Data_Release_Batches1n2_081425"
-    "\\labelsTr_topbrain_ct"
-)
+SOURCE_IMAGE_DIR    = os.getenv("TOPBRAIN_IMAGE_DIR", "")
+SOURCE_LABEL_DIR    = os.getenv("TOPBRAIN_LABEL_DIR", "")
 
 # Maximum valid label index (inclusive: classes 0–5)
 MAX_LABEL = 5

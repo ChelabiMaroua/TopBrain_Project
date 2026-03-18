@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Virtual environment
+env_gpu/
+
+# Environment variables
+.env
+
+# Checkpoints & model weights
+checkpoints/
+*.pth
+
+# Logs
+logs/
+
+# Generated output
+Graphs/
+Reconstruction/
