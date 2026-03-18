@@ -1,0 +1,18 @@
+python unet_files.py --target-size 128 128 64 --epochs 1
+python inference.py train --epochs 50 --augment
+```
+
+Ce que tu verras :
+```
+[split] total=27
+  Hold-out test  : 5 patients
+  K-Fold pool    : 22 patients
+  Fold 1 : train=18  val=4
+  Fold 2 : train=18  val=4
+  ...
+
+FOLD 1/5
+  Epoch  1/50  train=1.68  val=1.65  Dice=0.00  Combined=0.00
+  Epoch 10/50  train=1.42  val=1.38  Dice=0.12  Combined=0.09
+  Epoch 30/50  train=1.10  val=1.05  Dice=0.35  Combined=0.28
+  Epoch 50/50  train=0.85  val=0.82  Dice=0.58  Combined=0.47

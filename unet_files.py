@@ -4,18 +4,25 @@ unet_files.py — Pipeline 1: Direct NIfTI File Access
 Loads image/label pairs directly from the filesystem (no database required).
 This is the simplest pipeline and serves as the baseline for benchmarking.
 
-Nouveautés v2
+Nouveautés v3
 -------------
-- Data augmentation : flip aléatoire, rotation 90°, bruit gaussien, zoom.
+- Data augmentation via MONAI (standard imagerie médicale) :
+    flip 3 axes, rotation 90°, affine, bruit gaussien, lissage gaussien,
+    variation d'intensité, déformation élastique.
+  Fallback automatique vers l'implémentation manuelle si MONAI non installé.
 - Split 27 patients : train / validation / test (configurable).
 - Métriques calculées par moyenne de slices axiales (pas par slice individuelle).
 - Score combiné = moyenne(Dice_fg, IoU_fg).
 
+Installation MONAI
+------------------
+pip install monai
+
 Usage
 -----
 python unet_files.py --image-dir /path/to/images --label-dir /path/to/labels \
-    --target-size 128 128 64 --epochs 5 \
-    --train-ratio 0.70 --val-ratio 0.15   # test = 1 - train - val = 0.15
+    --target-size 128 128 64 --epochs 5 --augment \
+    --train-ratio 0.70 --val-ratio 0.15
 """
 
 import argparse
@@ -175,8 +182,111 @@ def normalize_volume(volume: np.ndarray) -> np.ndarray:
 
 
 # ---------------------------------------------------------------------------
-# Data Augmentation
+# Data Augmentation  — MONAI (avec fallback manuel si non installé)
 # ---------------------------------------------------------------------------
+
+# Tentative d'import MONAI (compatible selon versions)
+try:
+    from monai.transforms import (
+        Compose,
+        RandFlipd,
+        RandRotate90d,
+        RandAffined,
+        RandGaussianNoised,
+        RandGaussianSmoothd,
+        RandScaleIntensityd,
+        RandShiftIntensityd,
+        RandZoomd,
+    )
+    _MONAI_AVAILABLE = True
+
+    try:
+        from monai.transforms import Rand3DElasticd
+        _MONAI_ELASTIC_TRANSFORM = Rand3DElasticd
+        _MONAI_ELASTIC_AVAILABLE = True
+        print("  [augmentation] MONAI détecté — augmentation avancée activée (Rand3DElasticd).")
+    except ImportError:
+        _MONAI_ELASTIC_TRANSFORM = None
+        _MONAI_ELASTIC_AVAILABLE = False
+        print("  [augmentation] MONAI détecté — augmentation activée (sans déformation élastique).")
+except ImportError:
+    _MONAI_AVAILABLE = False
+    _MONAI_ELASTIC_AVAILABLE = False
+    _MONAI_ELASTIC_TRANSFORM = None
+    print("  [augmentation] MONAI non installé — fallback vers augmentation manuelle.")
+    print("                 Pour installer : pip install monai")
+
+
+def _build_monai_transforms() -> object:
+    """
+    Construit le pipeline d'augmentation MONAI pour imagerie médicale 3D.
+
+    Transformations appliquées (toutes aléatoires) :
+    ┌─────────────────────────────────────────────────────────────────┐
+    │  RandFlipd          p=0.5  axes 0, 1, 2 (sagittal/coronal/ax.) │
+    │  RandRotate90d      p=0.5  rotation 90° aléatoire              │
+    │  RandAffined        p=0.3  rotation ±15°, translation ±10px    │
+    │  RandZoomd          p=0.3  zoom 0.9–1.1                        │
+    │  RandGaussianNoised p=0.5  σ=0.05  (image uniquement)         │
+    │  RandGaussianSmoothd p=0.3 σ=0.5–1.0 (lissage léger)          │
+    │  RandScaleIntensityd p=0.5 facteur ±10% (contraste CT)        │
+    │  RandShiftIntensityd p=0.5 décalage ±10% (luminosité CT)      │
+    │  RandElasticDeformD  p=0.2 déformation élastique               │
+    └─────────────────────────────────────────────────────────────────┘
+    Note : toutes les transformations spatiales s'appliquent à image ET
+    label de façon synchronisée. Les transformations d'intensité
+    s'appliquent uniquement à l'image (préserve les labels).
+    """
+    transforms = [
+        # ── Transformations spatiales (image + label) ──
+        RandFlipd(keys=["image", "label"], prob=0.5, spatial_axis=0),
+        RandFlipd(keys=["image", "label"], prob=0.5, spatial_axis=1),
+        RandFlipd(keys=["image", "label"], prob=0.5, spatial_axis=2),
+        RandRotate90d(keys=["image", "label"], prob=0.5, max_k=3, spatial_axes=(0, 1)),
+        RandAffined(
+            keys=["image", "label"],
+            prob=0.3,
+            rotate_range=(0.26, 0.26, 0.26),   # ±15 degrés
+            translate_range=(10, 10, 5),
+            scale_range=(0.1, 0.1, 0.1),
+            mode=("bilinear", "nearest"),       # bilinear image, nearest label
+            padding_mode="zeros",
+        ),
+        RandZoomd(
+            keys=["image", "label"],
+            prob=0.3,
+            min_zoom=0.9, max_zoom=1.1,
+            mode=("trilinear", "nearest"),
+            keep_size=True,
+        ),
+        # ── Transformations d'intensité (image uniquement) ──
+        RandGaussianNoised(keys=["image"], prob=0.5, std=0.05),
+        RandGaussianSmoothd(
+            keys=["image"], prob=0.3,
+            sigma_x=(0.5, 1.0), sigma_y=(0.5, 1.0), sigma_z=(0.5, 1.0),
+        ),
+        RandScaleIntensityd(keys=["image"], factors=0.1, prob=0.5),
+        RandShiftIntensityd(keys=["image"], offsets=0.1, prob=0.5),
+    ]
+
+    if _MONAI_ELASTIC_AVAILABLE and _MONAI_ELASTIC_TRANSFORM is not None:
+        transforms.append(
+            _MONAI_ELASTIC_TRANSFORM(
+                keys=["image", "label"],
+                prob=0.2,
+                sigma_range=(5, 8),
+                magnitude_range=(100, 200),
+                mode=("bilinear", "nearest"),
+                padding_mode="zeros",
+            )
+        )
+
+    return Compose(transforms)
+
+
+# Instance globale du pipeline MONAI (créée une seule fois)
+_monai_transforms = _build_monai_transforms() if _MONAI_AVAILABLE else None
+
 
 def augment_volume(
     img: np.ndarray,
@@ -184,54 +294,61 @@ def augment_volume(
     rng: np.random.Generator,
 ) -> Tuple[np.ndarray, np.ndarray]:
     """
-    Apply random 3-D augmentations to an image/label pair.
-    All operations preserve label integer values (nearest-neighbor).
+    Applique l'augmentation 3D sur une paire image/label.
 
-    Augmentations applied randomly:
-      - Axial flip  (axis 0)       — p=0.5
-      - Sagittal flip (axis 1)     — p=0.5
-      - 90° rotation in axial plane — p=0.5  (k in {1,2,3})
-      - Gaussian noise on image    — p=0.5  (σ ~ 0.01–0.05)
-      - Random zoom crop           — p=0.3  (factor 0.9–1.0)
+    Si MONAI est installé  → pipeline MONAI complet (8 transformations).
+    Sinon                  → fallback manuel (flip, rotation, bruit, zoom).
+
+    Paramètres
+    ----------
+    img : np.ndarray (H, W, D) float32 — image normalisée [0, 1]
+    lbl : np.ndarray (H, W, D) float32 — labels (passés en float pour compat)
+    rng : np.random.Generator — non utilisé par MONAI mais gardé pour fallback
+
+    Retourne
+    --------
+    (img_aug, lbl_aug) — même shape, lbl en float32 (converti en int64 par le Dataset)
     """
-    # --- Random flips ---
+    if _MONAI_AVAILABLE:
+        # MONAI attend des tenseurs (C, H, W, D) — on ajoute le channel dim
+        sample = {
+            "image": torch.from_numpy(img).float().unsqueeze(0),   # (1, H, W, D)
+            "label": torch.from_numpy(lbl).float().unsqueeze(0),   # (1, H, W, D)
+        }
+        out    = _monai_transforms(sample)
+        img_out = out["image"].squeeze(0).numpy()   # (H, W, D)
+        lbl_out = out["label"].squeeze(0).numpy()   # (H, W, D)
+        # Clip image et arrondi labels
+        img_out = np.clip(img_out, 0.0, 1.0)
+        lbl_out = np.clip(np.round(lbl_out), 0, NUM_CLASSES - 1)
+        return img_out.astype(np.float32), lbl_out.astype(np.float32)
+
+    # ── Fallback manuel (si MONAI non disponible) ──
     for axis in (0, 1):
         if rng.random() < 0.5:
             img = np.flip(img, axis=axis).copy()
             lbl = np.flip(lbl, axis=axis).copy()
-
-    # --- Random 90° axial rotation ---
     if rng.random() < 0.5:
         k = int(rng.integers(1, 4))
         img = np.rot90(img, k=k, axes=(0, 1)).copy()
         lbl = np.rot90(lbl, k=k, axes=(0, 1)).copy()
-
-    # --- Gaussian noise (image only) ---
     if rng.random() < 0.5:
         sigma = rng.uniform(0.01, 0.05)
         img   = img + rng.normal(0, sigma, img.shape).astype(np.float32)
         img   = np.clip(img, 0.0, 1.0)
-
-    # --- Random zoom (crop + resize back) ---
     if rng.random() < 0.3:
-        factor = rng.uniform(0.9, 1.0)          # zoom out slightly
+        factor     = rng.uniform(0.9, 1.0)
         orig_shape = img.shape
         new_shape  = tuple(max(1, int(s * factor)) for s in orig_shape)
-        # Central crop to new_shape
-        starts = [(o - n) // 2 for o, n in zip(orig_shape, new_shape)]
-        img_crop = img[
-            starts[0]:starts[0]+new_shape[0],
-            starts[1]:starts[1]+new_shape[1],
-            starts[2]:starts[2]+new_shape[2],
-        ]
-        lbl_crop = lbl[
-            starts[0]:starts[0]+new_shape[0],
-            starts[1]:starts[1]+new_shape[1],
-            starts[2]:starts[2]+new_shape[2],
-        ]
+        starts     = [(o - n) // 2 for o, n in zip(orig_shape, new_shape)]
+        img_crop   = img[starts[0]:starts[0]+new_shape[0],
+                         starts[1]:starts[1]+new_shape[1],
+                         starts[2]:starts[2]+new_shape[2]]
+        lbl_crop   = lbl[starts[0]:starts[0]+new_shape[0],
+                         starts[1]:starts[1]+new_shape[1],
+                         starts[2]:starts[2]+new_shape[2]]
         img = resize_volume(img_crop, orig_shape, is_label=False)
         lbl = resize_volume(lbl_crop, orig_shape, is_label=True)
-
     return img, lbl
 
 
