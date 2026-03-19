@@ -36,17 +36,15 @@ import matplotlib.gridspec as gridspec
 import matplotlib.pyplot as plt
 import nibabel as nib
 import numpy as np
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # ---------------------------------------------------------------------------
-# Paths and constants
+# Paths and constants (loaded from .env)
 # ---------------------------------------------------------------------------
-DEFAULT_BASE = (
-    r"C:\Users\LENOVO\Desktop\PFE\data\raw"
-    r"\TopBrain_Data_Release_Batches1n2_081425"
-    r"\TopBrain_Data_Release_Batches1n2_081425"
-)
-DEFAULT_IMG_DIR = os.path.join(DEFAULT_BASE, "imagesTr_topbrain_ct")
-DEFAULT_LBL_DIR = os.path.join(DEFAULT_BASE, "labelsTr_topbrain_ct")
+DEFAULT_IMG_DIR = os.getenv("TOPBRAIN_IMAGE_DIR", "")
+DEFAULT_LBL_DIR = os.getenv("TOPBRAIN_LABEL_DIR", "")
 
 RECONSTRUCTION_DIR = "Reconstruction"
 

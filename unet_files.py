@@ -35,23 +35,16 @@ import nibabel as nib
 import numpy as np
 import torch
 import torch.nn as nn
+from dotenv import load_dotenv
 from torch.utils.data import DataLoader, Dataset
 
+load_dotenv()
+
 # ---------------------------------------------------------------------------
-# Default paths (update to match your environment)
+# Default paths (loaded from .env)
 # ---------------------------------------------------------------------------
-DEFAULT_IMAGE_DIR = (
-    "C:\\Users\\LENOVO\\Desktop\\PFE\\data\\raw"
-    "\\TopBrain_Data_Release_Batches1n2_081425"
-    "\\TopBrain_Data_Release_Batches1n2_081425"
-    "\\imagesTr_topbrain_ct"
-)
-DEFAULT_LABEL_DIR = (
-    "C:\\Users\\LENOVO\\Desktop\\PFE\\data\\raw"
-    "\\TopBrain_Data_Release_Batches1n2_081425"
-    "\\TopBrain_Data_Release_Batches1n2_081425"
-    "\\labelsTr_topbrain_ct"
-)
+DEFAULT_IMAGE_DIR = os.getenv("TOPBRAIN_IMAGE_DIR", "")
+DEFAULT_LABEL_DIR = os.getenv("TOPBRAIN_LABEL_DIR", "")
 
 NUM_CLASSES = 6   # classes 0-5
 
