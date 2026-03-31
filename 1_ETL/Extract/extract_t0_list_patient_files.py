@@ -18,13 +18,13 @@ load_dotenv()
 
 # Fixed Fallback Paths (based on your environment)
 FALLBACK_IMAGE_DIR = (
-    r"C:\Users\LENOVO\Desktop\PFE\data\raw"
+    r"C:\Users\LENOVO\Desktop\PFFECerine"
     r"\TopBrain_Data_Release_Batches1n2_081425"
     r"\TopBrain_Data_Release_Batches1n2_081425"
     r"\imagesTr_topbrain_ct"
 )
 FALLBACK_LABEL_DIR = (
-    r"C:\Users\LENOVO\Desktop\PFE\data\raw"
+    r"C:\Users\LENOVO\Desktop\PFFECerine"
     r"\TopBrain_Data_Release_Batches1n2_081425"
     r"\TopBrain_Data_Release_Batches1n2_081425"
     r"\labelsTr_topbrain_ct"

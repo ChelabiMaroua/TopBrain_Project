@@ -8,8 +8,8 @@ from monai.transforms import (
     RandRotate90d,
 )
 
-
 def build_monai_transforms(seed: int = 42) -> list[tuple[str, Compose]]:
+    """Définit la liste des augmentations MONAI à tester."""
     transforms = [
         (
             "Flip axis=0",
@@ -46,13 +46,15 @@ def build_monai_transforms(seed: int = 42) -> list[tuple[str, Compose]]:
         transform.set_random_state(seed + i)
     return transforms
 
-
 def apply_monai_transform(image: np.ndarray, label: np.ndarray, transform: Compose) -> tuple[np.ndarray, np.ndarray]:
+    """Applique une transformation MONAI sur un couple Image/Label."""
+    # MONAI attend un format [Channel, H, W, D] -> on ajoute la dimension Channel avec None
     sample = {
         "image": image[None, ...].astype(np.float32, copy=False),
         "label": label[None, ...].astype(np.int64, copy=False),
     }
     out = transform(sample)
+    # On retire la dimension Channel pour revenir en [H, W, D]
     aug_image = np.asarray(out["image"][0], dtype=np.float32)
     aug_label = np.asarray(out["label"][0], dtype=np.int64)
     return aug_image, aug_label

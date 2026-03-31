@@ -1,11 +1,16 @@
+import os
+
+from dotenv import load_dotenv
 from pymongo import MongoClient
 import nibabel as nib
 import numpy as np
 import cv2
 
-MONGO_URI = "mongodb://127.0.0.1:27018"
-DB_NAME = "TopBrain_DB"
-TARGET_SIZE_KEY = "128x128x64"
+load_dotenv()
+
+MONGO_URI = os.getenv("MONGO_URI", "mongodb://localhost:27017")
+DB_NAME = os.getenv("DB_NAME", os.getenv("MONGO_DB_NAME", "TopBrain_DB"))
+TARGET_SIZE_KEY = os.getenv("TARGET_SIZE_KEY", "128x128x64")
 MAX_LABEL = 5
 
 

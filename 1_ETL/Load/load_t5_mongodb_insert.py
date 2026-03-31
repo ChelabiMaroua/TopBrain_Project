@@ -73,6 +73,7 @@ def insert_one_patient(
     class_max: int,
     window_min: Optional[float],
     window_max: Optional[float],
+    keep_multiclass_labels: bool,
 ) -> Dict[str, float]:
     size_key = size_key_from_tuple(target_size)
     qc = {
@@ -135,7 +136,7 @@ def insert_one_patient(
     label_unique = np.unique(lbl)
     is_binary = set(label_unique.tolist()).issubset({0, 1})
     qc["label_is_binary"] = bool(is_binary)
-    if not is_binary:
+    if not is_binary and not keep_multiclass_labels:
         qc["label_binarized"] = True
         lbl = (lbl > 0).astype(np.int64)
 
@@ -187,6 +188,7 @@ def populate_binary_collection(
     class_max: int,
     window_min: Optional[float],
     window_max: Optional[float],
+    keep_multiclass_labels: bool,
 ) -> None:
     client = MongoClient(mongo_uri, serverSelectionTimeoutMS=5000)
     client.server_info()
@@ -228,6 +230,7 @@ def populate_binary_collection(
             class_max=class_max,
             window_min=window_min,
             window_max=window_max,
+            keep_multiclass_labels=keep_multiclass_labels,
         )
         total_img_bytes += stats["img_bytes"]
         total_lbl_bytes += stats["lbl_bytes"]
@@ -275,7 +278,12 @@ def main() -> None:
     parser.add_argument("--window-max", type=float, default=None)
     parser.add_argument("--mongo-uri", default=os.getenv("MONGO_URI", "mongodb://localhost:27017"))
     parser.add_argument("--db-name", default=os.getenv("MONGO_DB_NAME", "TopBrain_DB"))
-    parser.add_argument("--collection", default=os.getenv("MONGO_BINARY_COLLECTION", "BinaryPatients"))
+    parser.add_argument("--collection", default=os.getenv("MONGO_BINARY_COLLECTION", "MultiClassPatients"))
+    parser.add_argument(
+        "--keep-multiclass-labels",
+        action="store_true",
+        help="Conserve les labels multi-classes (0..N) au lieu de les binariser en {0,1}.",
+    )
     args = parser.parse_args()
 
     image_dir = detect_existing_dir(args.image_dir, FALLBACK_IMAGE_DIR)
@@ -293,6 +301,7 @@ def main() -> None:
         class_max=args.class_max,
         window_min=args.window_min,
         window_max=args.window_max,
+        keep_multiclass_labels=args.keep_multiclass_labels,
     )
 
 
