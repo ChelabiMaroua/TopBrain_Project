@@ -29,6 +29,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 from dotenv import load_dotenv
+from ETL.Transform.transform_t3_normalization import normalize_volume
 from pymongo import MongoClient
 from pymongo.errors import ServerSelectionTimeoutError
 from torch.utils.data import DataLoader, Dataset
@@ -127,14 +128,6 @@ def resize_volume(
     return zoom(volume, zoom_factors, order=order)
 
 
-def normalize_volume(volume: np.ndarray) -> np.ndarray:
-    """Min-max normalize to [0, 1]."""
-    vmin, vmax = volume.min(), volume.max()
-    if vmax - vmin > 0:
-        return (volume - vmin) / (vmax - vmin)
-    return volume
-
-
 # ---------------------------------------------------------------------------
 # Polygon <-> label-volume conversions
 # ---------------------------------------------------------------------------
@@ -155,7 +148,7 @@ def _find_contours(slice_mask: np.ndarray) -> List[List[List[int]]]:
         if contour.size == 0:
             continue
         pts = contour.squeeze(1)
-        if pts.ndim == 1:          # single-point contour — prevent crash
+        if pts.ndim == 1:          
             pts = pts[np.newaxis, :]
         results.append([[int(p[0]), int(p[1])] for p in pts])
     return results
@@ -166,15 +159,7 @@ def build_label_volume_from_polygons(
     shape: Tuple[int, int, int],
     label_ids: Optional[List[int]] = None,
 ) -> np.ndarray:
-    """
-    Reconstruct a dense label volume from stored polygon contours.
 
-    Parameters
-    ----------
-    segments  : list of segment dicts (as stored in MongoDB)
-    shape     : (height, width, depth) of the target volume
-    label_ids : optional filter — only reconstruct the listed class IDs
-    """
     height, width, depth = shape
     label_volume = np.zeros((height, width, depth), dtype=np.uint8)
 
@@ -192,7 +177,6 @@ def build_label_volume_from_polygons(
                 if pts.size == 0:
                     continue
                 cv2.fillPoly(slice_mask, [pts], 1)
-            # Higher label ID wins when masks overlap
             label_volume[:, :, z_idx] = np.where(
                 slice_mask > 0, label_id, label_volume[:, :, z_idx]
             )

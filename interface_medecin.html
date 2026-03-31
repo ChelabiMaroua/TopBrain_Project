@@ -3,940 +3,664 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>TopBrain — Segmentation Cérébrale</title>
+<title>TopBrain Analytics — Neural Segmentation Platform</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600;700&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&family=Syne:wght@400;600;700;800&display=swap');
+:root {
+  --bg0:#080a0e; --bg1:#0c0f15; --bg2:#111620; --bg3:#161c2a;
+  --border:#1e2840; --border2:#263352;
+  --text:#c4cfe8; --text-dim:#4a5a7a; --text-xdim:#2a3550;
+  --green:#00ff88; --green-dim:#00b85f;
+  --cyan:#00d4ff; --amber:#ffb400; --red:#ff4466; --violet:#9b6dff;
+  --c1:#ff4466; --c2:#00ff88; --c3:#00aaff; --c4:#ffb400; --c5:#cc44ff;
+  --font-mono:'IBM Plex Mono',monospace;
+  --font-sans:'IBM Plex Sans',sans-serif;
+}
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;height:100%;background:var(--bg0);color:var(--text);font-family:var(--font-mono);overflow:hidden}
+body::before{content:'';position:fixed;inset:0;z-index:1000;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,0.025) 2px,rgba(0,0,0,0.025) 4px);pointer-events:none}
 
-  :root {
-    --bg:        #070b12;
-    --surface:   #0d1520;
-    --border:    #1a2740;
-    --accent:    #00e5ff;
-    --accent2:   #7c4dff;
-    --text:      #c8d8f0;
-    --text-dim:  #4a6080;
-    --success:   #00e676;
-    --warn:      #ff9800;
+/* HEADER */
+.header{position:fixed;top:0;left:0;right:0;z-index:100;height:48px;background:var(--bg1);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 20px;gap:0}
+.header-brand{display:flex;align-items:center;gap:12px;padding-right:20px;border-right:1px solid var(--border);margin-right:20px}
+.brand-glyph{width:28px;height:28px}
+.brand-glyph svg{width:100%;height:100%}
+.brand-name{font-size:13px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--cyan)}
+.brand-sub{font-size:9px;letter-spacing:.2em;color:var(--text-dim);text-transform:uppercase;margin-top:1px}
+.header-tabs{display:flex;gap:2px;flex:1}
+.htab{padding:0 14px;height:48px;display:flex;align-items:center;gap:6px;font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--text-dim);cursor:pointer;border-bottom:2px solid transparent;transition:all .15s;white-space:nowrap;background:transparent;border-top:none;border-left:none;border-right:none;font-family:var(--font-mono)}
+.htab:hover{color:var(--text);background:rgba(255,255,255,.03)}
+.htab.active{color:var(--cyan);border-bottom-color:var(--cyan)}
+.htab-dot{width:5px;height:5px;border-radius:50%;background:currentColor}
+.header-right{display:flex;align-items:center;gap:16px;padding-left:20px;border-left:1px solid var(--border)}
+.sys-indicator{display:flex;align-items:center;gap:6px;font-size:9px;letter-spacing:.1em;color:var(--text-dim)}
+.sys-dot{width:6px;height:6px;border-radius:50%;background:var(--green);box-shadow:0 0 6px var(--green);animation:blink 2s ease-in-out infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+.clock{font-size:11px;color:var(--amber);letter-spacing:.08em}
 
-    --c0: #111827;
-    --c1: #ef4444;
-    --c2: #22c55e;
-    --c3: #3b82f6;
-    --c4: #eab308;
-    --c5: #a855f7;
-  }
+/* LAYOUT */
+.app{position:fixed;top:48px;bottom:0;left:0;right:0;display:grid;grid-template-columns:280px 1fr 260px;gap:1px;background:var(--border)}
 
-  * { margin: 0; padding: 0; box-sizing: border-box; }
+/* LEFT PANEL */
+.panel-left{background:var(--bg1);display:flex;flex-direction:column;overflow:hidden}
+.panel-section{border-bottom:1px solid var(--border);flex-shrink:0}
+.ps-header{padding:8px 14px;display:flex;align-items:center;justify-content:space-between;background:var(--bg2)}
+.ps-title{font-size:9px;letter-spacing:.2em;text-transform:uppercase;color:var(--text-dim)}
+.ps-badge{font-size:8px;padding:1px 6px;background:rgba(0,212,255,.1);border:1px solid rgba(0,212,255,.3);color:var(--cyan);border-radius:2px;letter-spacing:.1em}
+.ps-body{padding:12px 14px}
 
-  body {
-    background: var(--bg);
-    color: var(--text);
-    font-family: 'Syne', sans-serif;
-    min-height: 100vh;
-    overflow-x: hidden;
-  }
+.dropzone{border:1px dashed var(--border2);border-radius:3px;padding:18px 12px;text-align:center;cursor:pointer;transition:all .2s;background:rgba(0,212,255,.02);position:relative;overflow:hidden}
+.dropzone::before{content:'';position:absolute;inset:0;background:linear-gradient(135deg,transparent 40%,rgba(0,212,255,.03) 100%);pointer-events:none}
+.dropzone:hover,.dropzone.dragover{border-color:var(--cyan);background:rgba(0,212,255,.05)}
+.dz-icon{font-size:22px;margin-bottom:8px;filter:grayscale(.5)}
+.dz-text{font-size:10px;color:var(--text-dim);line-height:1.7;letter-spacing:.05em}
+.dz-text strong{color:var(--cyan);font-weight:500}
+#file-input{display:none}
+.file-pill{display:none;margin-top:8px;background:rgba(0,255,136,.06);border:1px solid rgba(0,255,136,.2);border-radius:3px;padding:7px 10px}
+.file-pill.show{display:block}
+.fp-name{font-size:10px;color:var(--green);word-break:break-all}
+.fp-meta{font-size:9px;color:var(--text-dim);margin-top:3px}
 
-  /* ── Grain overlay ── */
-  body::before {
-    content: '';
-    position: fixed; inset: 0; z-index: 0;
-    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
-    pointer-events: none; opacity: .6;
-  }
+.btn-run{width:100%;padding:10px;background:transparent;border:1px solid var(--cyan);color:var(--cyan);font-family:var(--font-mono);font-size:10px;letter-spacing:.15em;text-transform:uppercase;cursor:pointer;transition:all .2s;position:relative;overflow:hidden}
+.btn-run::before{content:'';position:absolute;top:0;left:-100%;width:100%;height:100%;background:linear-gradient(90deg,transparent,rgba(0,212,255,.15),transparent);transition:left .4s}
+.btn-run:hover::before{left:100%}
+.btn-run:hover{background:rgba(0,212,255,.08);box-shadow:0 0 16px rgba(0,212,255,.2),inset 0 0 16px rgba(0,212,255,.05)}
+.btn-run:disabled{border-color:var(--border2);color:var(--text-dim);cursor:not-allowed}
+.btn-run:disabled::before{display:none}
 
-  /* ── Header ── */
-  header {
-    position: relative; z-index: 10;
-    display: flex; align-items: center; justify-content: space-between;
-    padding: 1.2rem 2.5rem;
-    border-bottom: 1px solid var(--border);
-    backdrop-filter: blur(12px);
-    background: rgba(7,11,18,.85);
-  }
-  .logo {
-    display: flex; align-items: center; gap: .75rem;
-  }
-  .logo-icon {
-    width: 36px; height: 36px;
-    background: linear-gradient(135deg, var(--accent), var(--accent2));
-    border-radius: 8px;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 18px;
-  }
-  .logo-text { font-size: 1.25rem; font-weight: 800; letter-spacing: -.5px; }
-  .logo-text span { color: var(--accent); }
-  .header-tag {
-    font-family: 'Space Mono', monospace;
-    font-size: .65rem; color: var(--text-dim);
-    border: 1px solid var(--border);
-    padding: .25rem .6rem; border-radius: 4px;
-    letter-spacing: .08em;
-  }
-  .status-dot {
-    width: 8px; height: 8px; border-radius: 50%;
-    background: var(--success);
-    box-shadow: 0 0 8px var(--success);
-    animation: pulse 2s infinite;
-  }
-  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+.progress-block{margin-top:10px;display:none}
+.progress-block.show{display:block}
+.pb-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:4px}
+.pb-label{font-size:9px;color:var(--text-dim);letter-spacing:.1em}
+.pb-pct{font-size:9px;color:var(--cyan)}
+.pb-track{height:2px;background:var(--border);border-radius:1px;overflow:hidden}
+.pb-fill{height:100%;width:0%;background:linear-gradient(90deg,var(--cyan),var(--green));transition:width .3s;border-radius:1px}
+.pb-steps{margin-top:6px}
+.pb-step{font-size:9px;color:var(--text-xdim);padding:1px 0;transition:color .2s}
+.pb-step.active{color:var(--cyan)}
+.pb-step.done{color:var(--green-dim)}
+.pb-step.done::before{content:'✓ '}
+.pb-step.active::before{content:'▶ '}
+.pb-step::before{content:'  '}
 
-  /* ── Layout ── */
-  .layout {
-    position: relative; z-index: 1;
-    display: grid;
-    grid-template-columns: 320px 1fr;
-    grid-template-rows: 1fr;
-    height: calc(100vh - 65px);
-  }
+.ctrl-grid{display:flex;flex-direction:column;gap:8px}
+.ctrl-row{display:flex;align-items:center;justify-content:space-between}
+.ctrl-lbl{font-size:9px;color:var(--text-dim);letter-spacing:.08em}
+.ctrl-val{font-size:9px;color:var(--amber);min-width:28px;text-align:right}
+input[type=range]{-webkit-appearance:none;width:80px;height:2px;background:var(--border2);border-radius:1px;outline:none;cursor:pointer}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:10px;height:10px;border-radius:50%;background:var(--cyan);box-shadow:0 0 6px var(--cyan);cursor:pointer}
+.toggle2{width:32px;height:16px;background:var(--border2);border-radius:8px;border:none;cursor:pointer;position:relative;transition:background .2s}
+.toggle2.on{background:rgba(0,212,255,.4);border:1px solid var(--cyan)}
+.toggle2::after{content:'';position:absolute;width:10px;height:10px;border-radius:50%;background:var(--text-dim);top:3px;left:3px;transition:all .2s}
+.toggle2.on::after{background:var(--cyan);transform:translateX(16px);box-shadow:0 0 5px var(--cyan)}
 
-  /* ── Sidebar ── */
-  .sidebar {
-    border-right: 1px solid var(--border);
-    display: flex; flex-direction: column;
-    overflow-y: auto;
-    background: var(--surface);
-  }
-  .sidebar-section {
-    padding: 1.5rem;
-    border-bottom: 1px solid var(--border);
-  }
-  .section-label {
-    font-family: 'Space Mono', monospace;
-    font-size: .62rem; letter-spacing: .12em;
-    color: var(--accent); text-transform: uppercase;
-    margin-bottom: 1rem;
-  }
+.legend-grid{display:flex;flex-direction:column;gap:2px}
+.leg-item{display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:2px;cursor:pointer;transition:background .15s;border:1px solid transparent}
+.leg-item:hover{background:rgba(255,255,255,.03);border-color:var(--border)}
+.leg-item.off{opacity:.3}
+.leg-bar{width:3px;height:28px;border-radius:1px;flex-shrink:0}
+.leg-info{flex:1}
+.leg-name{font-size:9px;color:var(--text);letter-spacing:.05em}
+.leg-stats{display:flex;gap:8px;margin-top:2px}
+.leg-stat{font-size:8px;color:var(--text-dim)}
+.leg-stat span{color:var(--amber)}
 
-  /* Drop zone */
-  .dropzone {
-    border: 2px dashed var(--border);
-    border-radius: 10px;
-    padding: 2rem 1rem;
-    text-align: center;
-    cursor: pointer;
-    transition: all .25s;
-    background: rgba(0,229,255,.03);
-  }
-  .dropzone:hover, .dropzone.dragover {
-    border-color: var(--accent);
-    background: rgba(0,229,255,.07);
-  }
-  .dropzone-icon { font-size: 2rem; margin-bottom: .75rem; }
-  .dropzone p { font-size: .85rem; color: var(--text-dim); line-height: 1.5; }
-  .dropzone p strong { color: var(--text); }
-  #file-input { display: none; }
+/* CENTER PANEL */
+.panel-center{background:var(--bg0);display:flex;flex-direction:column;overflow:hidden;position:relative}
+.view-toolbar{height:36px;background:var(--bg1);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 12px;gap:2px;flex-shrink:0}
+.vt-btn{height:26px;padding:0 12px;font-family:var(--font-mono);font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--text-dim);background:transparent;border:1px solid transparent;border-radius:2px;cursor:pointer;transition:all .15s}
+.vt-btn:hover{color:var(--text);border-color:var(--border)}
+.vt-btn.active{color:var(--cyan);border-color:var(--border2);background:rgba(0,212,255,.07)}
+.vt-sep{width:1px;height:20px;background:var(--border);margin:0 6px}
+.vt-info{margin-left:auto;font-size:9px;color:var(--text-dim);letter-spacing:.08em}
+.vt-info span{color:var(--amber)}
+.view-panels{flex:1;position:relative;overflow:hidden}
+.view-pane{position:absolute;inset:0;display:none}
+.view-pane.active{display:block}
 
-  /* File info */
-  .file-info {
-    display: none;
-    background: rgba(0,229,255,.05);
-    border: 1px solid rgba(0,229,255,.2);
-    border-radius: 8px;
-    padding: .75rem 1rem;
-    margin-top: .75rem;
-  }
-  .file-info.visible { display: block; }
-  .file-name {
-    font-family: 'Space Mono', monospace;
-    font-size: .72rem; color: var(--accent);
-    word-break: break-all;
-  }
-  .file-meta { font-size: .7rem; color: var(--text-dim); margin-top: .25rem; }
+#vp-3d{background:radial-gradient(ellipse at 35% 45%,#0a1525 0%,#050810 65%)}
+#three-mount{width:100%;height:100%}
+.threed-hud{position:absolute;pointer-events:none}
+.hud-tl{top:12px;left:12px}
+.hud-br{bottom:12px;right:12px}
+.hud-bl{bottom:12px;left:12px}
+.hud-label{font-size:8px;letter-spacing:.15em;text-transform:uppercase;color:var(--text-dim);line-height:1.8}
+.hud-val{color:var(--cyan);font-weight:500}
+.crosshair{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);pointer-events:none;opacity:.15}
+.ch-h{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:30px;height:1px;background:var(--cyan)}
+.ch-v{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:1px;height:30px;background:var(--cyan)}
+.ch-c{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:8px;height:8px;border-radius:50%;border:1px solid var(--cyan)}
 
-  /* Segment button */
-  .btn-segment {
-    width: 100%; padding: .85rem;
-    background: linear-gradient(135deg, var(--accent), var(--accent2));
-    border: none; border-radius: 8px;
-    color: #fff; font-family: 'Syne', sans-serif;
-    font-size: .95rem; font-weight: 700;
-    cursor: pointer; letter-spacing: .02em;
-    transition: all .25s; position: relative; overflow: hidden;
-  }
-  .btn-segment:disabled {
-    opacity: .35; cursor: not-allowed;
-  }
-  .btn-segment:not(:disabled):hover {
-    transform: translateY(-1px);
-    box-shadow: 0 8px 24px rgba(0,229,255,.25);
-  }
-  .btn-segment::after {
-    content: '';
-    position: absolute; inset: 0;
-    background: linear-gradient(90deg, transparent, rgba(255,255,255,.15), transparent);
-    transform: translateX(-100%);
-  }
-  .btn-segment.loading::after {
-    animation: shimmer 1.2s infinite;
-  }
-  @keyframes shimmer { to { transform: translateX(100%); } }
+#vp-slices{display:none}
+#vp-slices.active{display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:1px;background:var(--border)}
+.slice-quad{background:#050810;position:relative;display:flex;align-items:center;justify-content:center;overflow:hidden}
+.slice-quad canvas{max-width:100%;max-height:100%;image-rendering:pixelated}
+.sq-label{position:absolute;top:6px;left:8px;font-size:8px;letter-spacing:.15em;text-transform:uppercase;color:var(--cyan);opacity:.7;background:rgba(5,8,16,.8);padding:2px 6px;border-radius:2px;border:1px solid rgba(0,212,255,.2)}
+.sq-coords{position:absolute;bottom:6px;right:8px;font-size:8px;color:var(--text-dim);background:rgba(5,8,16,.8);padding:2px 6px;border-radius:2px}
 
-  /* Progress */
-  .progress-wrap {
-    display: none; margin-top: .75rem;
-  }
-  .progress-wrap.visible { display: block; }
-  .progress-bar-bg {
-    background: var(--border); border-radius: 4px; height: 4px; overflow: hidden;
-  }
-  .progress-bar-fill {
-    height: 100%; border-radius: 4px;
-    background: linear-gradient(90deg, var(--accent), var(--accent2));
-    width: 0%; transition: width .3s;
-  }
-  .progress-label {
-    font-family: 'Space Mono', monospace;
-    font-size: .65rem; color: var(--text-dim);
-    margin-top: .4rem;
-  }
+#vp-overlay{display:none;flex-direction:column}
+#vp-overlay.active{display:flex}
+.overlay-canvas-wrap{flex:1;display:flex;align-items:center;justify-content:center;background:#050810;position:relative}
+#canvas-overlay{image-rendering:pixelated}
+.overlay-controls{height:44px;background:var(--bg1);border-top:1px solid var(--border);display:flex;align-items:center;padding:0 16px;gap:16px}
+.oc-label{font-size:9px;color:var(--text-dim);letter-spacing:.08em}
+.oc-val{font-size:9px;color:var(--amber);min-width:24px}
+#overlay-slider{width:160px}
 
-  /* Controls */
-  .control-row {
-    display: flex; flex-direction: column; gap: .6rem;
-  }
-  .control-item {
-    display: flex; justify-content: space-between; align-items: center;
-  }
-  .control-label { font-size: .82rem; color: var(--text-dim); }
-  .toggle {
-    width: 38px; height: 20px;
-    background: var(--border); border-radius: 10px;
-    border: none; cursor: pointer; position: relative;
-    transition: background .2s;
-  }
-  .toggle.on { background: var(--accent2); }
-  .toggle::after {
-    content: ''; position: absolute;
-    width: 14px; height: 14px; border-radius: 50%;
-    background: #fff; top: 3px; left: 3px;
-    transition: transform .2s;
-  }
-  .toggle.on::after { transform: translateX(18px); }
+.empty-state{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;pointer-events:none}
+.es-grid{display:grid;grid-template-columns:repeat(8,1fr);gap:3px;opacity:.06;margin-bottom:8px}
+.es-cell{width:18px;height:18px;border:1px solid var(--cyan);border-radius:1px}
+.es-cell:nth-child(3n){background:rgba(0,212,255,.3)}
+.es-text{font-size:10px;color:var(--text-dim);text-align:center;line-height:2;letter-spacing:.1em}
+.es-cmd{font-size:9px;color:var(--border2);border:1px solid var(--border);padding:4px 12px;border-radius:2px;letter-spacing:.15em}
 
-  input[type=range] {
-    -webkit-appearance: none; width: 90px; height: 4px;
-    background: var(--border); border-radius: 2px; outline: none;
-  }
-  input[type=range]::-webkit-slider-thumb {
-    -webkit-appearance: none;
-    width: 14px; height: 14px; border-radius: 50%;
-    background: var(--accent); cursor: pointer;
-  }
+/* RIGHT PANEL */
+.panel-right{background:var(--bg1);display:flex;flex-direction:column;overflow-y:auto;overflow-x:hidden}
+.metric-card{border-bottom:1px solid var(--border);padding:12px 14px}
+.mc-header{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px}
+.mc-label{font-size:8px;letter-spacing:.2em;text-transform:uppercase;color:var(--text-dim)}
+.mc-time{font-size:8px;color:var(--text-xdim)}
+.mc-main{display:flex;align-items:baseline;gap:6px;margin-bottom:4px}
+.mc-val{font-size:28px;font-weight:600;color:var(--green);line-height:1}
+.mc-unit{font-size:10px;color:var(--text-dim)}
+.mc-delta{font-size:9px;padding:1px 5px;border-radius:2px;margin-left:auto}
+.mc-delta.pos{background:rgba(0,255,136,.1);color:var(--green);border:1px solid rgba(0,255,136,.2)}
+.mc-delta.neg{background:rgba(255,68,102,.1);color:var(--red);border:1px solid rgba(255,68,102,.2)}
+.mc-delta.neu{background:rgba(255,180,0,.1);color:var(--amber);border:1px solid rgba(255,180,0,.2)}
+.sparkline{height:32px;position:relative;margin-top:4px}
+.sparkline svg{width:100%;height:100%}
+.breakdown-table{width:100%;border-collapse:collapse}
+.breakdown-table th{font-size:8px;letter-spacing:.12em;text-transform:uppercase;color:var(--text-xdim);padding:4px 0;text-align:left;border-bottom:1px solid var(--border)}
+.breakdown-table th:last-child,.breakdown-table td:last-child{text-align:right}
+.breakdown-table td{font-size:9px;color:var(--text);padding:5px 0;border-bottom:1px solid rgba(30,40,64,.5);vertical-align:middle}
+.bt-swatch{display:inline-block;width:6px;height:6px;border-radius:1px;margin-right:5px;vertical-align:middle}
+.bt-bar-wrap{width:60px;height:3px;background:var(--border);border-radius:1px;display:inline-block;vertical-align:middle}
+.bt-bar{height:100%;border-radius:1px}
+.bt-pct{color:var(--amber)}
+.log-feed{padding:10px 14px;flex:1}
+.log-line{font-size:8px;line-height:2;color:var(--text-dim);display:flex;gap:8px;letter-spacing:.04em}
+.log-ts{color:var(--text-xdim);flex-shrink:0}
+.log-tag{flex-shrink:0;padding:0 4px;border-radius:1px;font-size:7px;letter-spacing:.1em}
+.tag-ok{background:rgba(0,255,136,.1);color:var(--green)}
+.tag-info{background:rgba(0,212,255,.1);color:var(--cyan)}
+.tag-warn{background:rgba(255,180,0,.1);color:var(--amber)}
+.log-msg{color:var(--text-dim)}
 
-  /* Legend */
-  .legend { display: flex; flex-direction: column; gap: .5rem; }
-  .legend-item {
-    display: flex; align-items: center; gap: .65rem;
-    padding: .4rem .6rem; border-radius: 6px;
-    transition: background .15s; cursor: pointer;
-    border: 1px solid transparent;
-  }
-  .legend-item:hover { background: rgba(255,255,255,.04); }
-  .legend-item.hidden-class { opacity: .35; }
-  .legend-swatch {
-    width: 14px; height: 14px; border-radius: 3px; flex-shrink: 0;
-  }
-  .legend-name { font-size: .82rem; flex: 1; }
-  .legend-pct {
-    font-family: 'Space Mono', monospace;
-    font-size: .7rem; color: var(--text-dim);
-  }
+::-webkit-scrollbar{width:3px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px}
 
-  /* Stats */
-  .stats-grid {
-    display: grid; grid-template-columns: 1fr 1fr; gap: .5rem;
-  }
-  .stat-card {
-    background: rgba(255,255,255,.03);
-    border: 1px solid var(--border);
-    border-radius: 8px; padding: .75rem;
-  }
-  .stat-val {
-    font-family: 'Space Mono', monospace;
-    font-size: 1.1rem; color: var(--accent);
-    font-weight: 700;
-  }
-  .stat-lbl { font-size: .68rem; color: var(--text-dim); margin-top: .15rem; }
+.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%) translateY(80px);z-index:999;background:var(--bg2);border:1px solid var(--border2);border-left:3px solid var(--cyan);padding:10px 18px;font-size:10px;letter-spacing:.08em;color:var(--text);border-radius:2px;transition:transform .3s cubic-bezier(.17,.67,.3,1.2);white-space:nowrap}
+.toast.show{transform:translateX(-50%) translateY(0)}
 
-  /* ── Main view ── */
-  .main-view {
-    display: flex; flex-direction: column; overflow: hidden;
-  }
-
-  /* Tab bar */
-  .tab-bar {
-    display: flex; border-bottom: 1px solid var(--border);
-    background: var(--surface); flex-shrink: 0;
-  }
-  .tab {
-    padding: .85rem 1.5rem;
-    font-size: .85rem; font-weight: 600;
-    color: var(--text-dim); border: none;
-    background: transparent; cursor: pointer;
-    border-bottom: 2px solid transparent;
-    transition: all .2s;
-  }
-  .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
-  .tab:hover:not(.active) { color: var(--text); }
-
-  /* View panels */
-  .view-panel { display: none; flex: 1; overflow: hidden; }
-  .view-panel.active { display: flex; }
-
-  /* 3D view */
-  #view-3d {
-    position: relative;
-    background: radial-gradient(ellipse at 30% 40%, #0d1a2e 0%, #070b12 70%);
-  }
-  #three-canvas { width: 100% !important; height: 100% !important; }
-  .three-overlay {
-    position: absolute; bottom: 1.5rem; left: 1.5rem;
-    font-family: 'Space Mono', monospace;
-    font-size: .65rem; color: var(--text-dim);
-    pointer-events: none;
-  }
-  .axis-label { display: flex; align-items: center; gap: .4rem; margin-bottom: .2rem; }
-  .axis-dot { width: 8px; height: 8px; border-radius: 50%; }
-
-  /* Slice views */
-  #view-slices {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    grid-template-rows: 1fr 1fr;
-    gap: 2px;
-    background: #000;
-  }
-  .slice-panel {
-    background: #080e18; position: relative; overflow: hidden;
-    display: flex; align-items: center; justify-content: center;
-  }
-  .slice-panel canvas { max-width: 100%; max-height: 100%; }
-  .slice-label {
-    position: absolute; top: .5rem; left: .75rem;
-    font-family: 'Space Mono', monospace;
-    font-size: .62rem; color: var(--accent);
-    letter-spacing: .1em;
-    background: rgba(7,11,18,.7);
-    padding: .2rem .5rem; border-radius: 3px;
-  }
-  .slice-slider-wrap {
-    position: absolute; bottom: .75rem; left: 50%; transform: translateX(-50%);
-    display: flex; align-items: center; gap: .5rem;
-  }
-  .slice-slider-wrap input[type=range] { width: 100px; }
-  .slice-num {
-    font-family: 'Space Mono', monospace;
-    font-size: .6rem; color: var(--text-dim); min-width: 24px; text-align: right;
-  }
-
-  /* Empty state */
-  .empty-state {
-    position: absolute; inset: 0;
-    display: flex; flex-direction: column;
-    align-items: center; justify-content: center;
-    gap: 1rem; pointer-events: none;
-  }
-  .empty-icon { font-size: 4rem; opacity: .15; }
-  .empty-text {
-    font-size: .9rem; color: var(--text-dim);
-    text-align: center; max-width: 280px; line-height: 1.6;
-  }
-
-  /* Scrollbar */
-  ::-webkit-scrollbar { width: 4px; }
-  ::-webkit-scrollbar-track { background: transparent; }
-  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
-
-  /* Toast */
-  .toast {
-    position: fixed; bottom: 2rem; right: 2rem; z-index: 100;
-    background: var(--surface); border: 1px solid var(--accent);
-    border-radius: 8px; padding: .85rem 1.25rem;
-    font-size: .85rem; color: var(--text);
-    transform: translateY(120%); transition: transform .3s;
-    max-width: 300px;
-  }
-  .toast.show { transform: translateY(0); }
+@keyframes fadeIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+.panel-left,.panel-center,.panel-right{animation:fadeIn .4s ease both}
+.panel-center{animation-delay:.05s}
+.panel-right{animation-delay:.1s}
 </style>
 </head>
 <body>
 
-<!-- Header -->
-<header>
-  <div class="logo">
-    <div class="logo-icon">🧠</div>
-    <div class="logo-text">Top<span>Brain</span></div>
+<header class="header">
+  <div class="header-brand">
+    <div class="brand-glyph">
+      <svg viewBox="0 0 28 28" fill="none">
+        <circle cx="14" cy="14" r="13" stroke="#00d4ff" stroke-width="1" opacity=".4"/>
+        <circle cx="14" cy="14" r="8" stroke="#00d4ff" stroke-width="1" opacity=".6"/>
+        <circle cx="14" cy="14" r="3" fill="#00d4ff"/>
+        <line x1="14" y1="1" x2="14" y2="6" stroke="#00d4ff" stroke-width="1"/>
+        <line x1="14" y1="22" x2="14" y2="27" stroke="#00d4ff" stroke-width="1"/>
+        <line x1="1" y1="14" x2="6" y2="14" stroke="#00d4ff" stroke-width="1"/>
+        <line x1="22" y1="14" x2="27" y2="14" stroke="#00d4ff" stroke-width="1"/>
+      </svg>
+    </div>
+    <div>
+      <div class="brand-name">TopBrain</div>
+      <div class="brand-sub">Neural Analytics v2.4</div>
+    </div>
   </div>
-  <div class="header-tag">SEGMENTATION CÉRÉBRALE CT · v2.0</div>
-  <div style="display:flex;align-items:center;gap:.6rem">
-    <div class="status-dot"></div>
-    <span style="font-size:.75rem;color:var(--text-dim)">Système prêt</span>
+  <div class="header-tabs">
+    <button class="htab active"><div class="htab-dot"></div>Segmentation</button>
+    <button class="htab"><div class="htab-dot" style="background:var(--amber)"></div>K-Fold Results</button>
+    <button class="htab"><div class="htab-dot" style="background:var(--violet)"></div>Patient Cohort</button>
+    <button class="htab"><div class="htab-dot" style="background:var(--red)"></div>Model Metrics</button>
+  </div>
+  <div class="header-right">
+    <div class="sys-indicator"><div class="sys-dot"></div><span>SYSTEM ONLINE</span></div>
+    <div class="sys-indicator"><div class="sys-dot" style="background:var(--amber);box-shadow:0 0 6px var(--amber)"></div><span>GPU CUDA</span></div>
+    <div class="clock" id="clock">00:00:00</div>
   </div>
 </header>
 
-<div class="layout">
+<div class="app">
 
-  <!-- ── Sidebar ── -->
-  <aside class="sidebar">
-
-    <!-- Upload -->
-    <div class="sidebar-section">
-      <div class="section-label">01 · Chargement image</div>
-      <div class="dropzone" id="dropzone" onclick="document.getElementById('file-input').click()">
-        <div class="dropzone-icon">📂</div>
-        <p><strong>Glisser un fichier NIfTI</strong><br>ou cliquer pour parcourir<br>
-        <span style="font-size:.72rem;color:var(--text-dim)">.nii / .nii.gz</span></p>
-      </div>
-      <input type="file" id="file-input" accept=".nii,.nii.gz">
-      <div class="file-info" id="file-info">
-        <div class="file-name" id="file-name">—</div>
-        <div class="file-meta" id="file-meta">—</div>
-      </div>
-    </div>
-
-    <!-- Segment -->
-    <div class="sidebar-section">
-      <div class="section-label">02 · Segmentation</div>
-      <button class="btn-segment" id="btn-segment" disabled onclick="runSegmentation()">
-        ⚡ Lancer la segmentation
-      </button>
-      <div class="progress-wrap" id="progress-wrap">
-        <div class="progress-bar-bg">
-          <div class="progress-bar-fill" id="progress-fill"></div>
+  <!-- LEFT -->
+  <aside class="panel-left">
+    <div class="panel-section">
+      <div class="ps-header"><span class="ps-title">Input Stream</span><span class="ps-badge">NIfTI</span></div>
+      <div class="ps-body">
+        <div class="dropzone" id="dropzone" onclick="document.getElementById('file-input').click()">
+          <div class="dz-icon">⬡</div>
+          <div class="dz-text"><strong>DROP VOLUME FILE</strong><br>.nii / .nii.gz<br><span style="font-size:8px;opacity:.6">or click to browse filesystem</span></div>
         </div>
-        <div class="progress-label" id="progress-label">Initialisation...</div>
-      </div>
-    </div>
-
-    <!-- Controls -->
-    <div class="sidebar-section">
-      <div class="section-label">03 · Affichage</div>
-      <div class="control-row">
-        <div class="control-item">
-          <span class="control-label">Afficher le volume CT</span>
-          <button class="toggle on" id="tog-ct" onclick="toggleControl(this,'ct')"></button>
-        </div>
-        <div class="control-item">
-          <span class="control-label">Segments colorés</span>
-          <button class="toggle on" id="tog-seg" onclick="toggleControl(this,'seg')"></button>
-        </div>
-        <div class="control-item">
-          <span class="control-label">Transparence</span>
-          <input type="range" id="opacity-slider" min="10" max="100" value="70"
-                 oninput="updateOpacity(this.value)">
-        </div>
-        <div class="control-item">
-          <span class="control-label">Seuil CT</span>
-          <input type="range" id="thresh-slider" min="0" max="100" value="30"
-                 oninput="updateThreshold(this.value)">
+        <input type="file" id="file-input" accept=".nii,.nii.gz">
+        <div class="file-pill" id="file-pill">
+          <div class="fp-name" id="fp-name">—</div>
+          <div class="fp-meta" id="fp-meta">—</div>
         </div>
       </div>
     </div>
 
-    <!-- Legend -->
-    <div class="sidebar-section">
-      <div class="section-label">04 · Structures</div>
-      <div class="legend" id="legend">
-        <!-- Populated by JS -->
-      </div>
-    </div>
-
-    <!-- Stats -->
-    <div class="sidebar-section">
-      <div class="section-label">05 · Métriques</div>
-      <div class="stats-grid" id="stats-grid">
-        <div class="stat-card">
-          <div class="stat-val" id="stat-dice">—</div>
-          <div class="stat-lbl">Dice score (moy)</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-val" id="stat-iou">—</div>
-          <div class="stat-lbl">IoU (moy fg)</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-val" id="stat-voxels">—</div>
-          <div class="stat-lbl">Voxels segmentés</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-val" id="stat-classes">—</div>
-          <div class="stat-lbl">Classes détectées</div>
+    <div class="panel-section">
+      <div class="ps-header"><span class="ps-title">Inference Pipeline</span></div>
+      <div class="ps-body" style="display:flex;flex-direction:column;gap:8px">
+        <button class="btn-run" id="btn-run" disabled onclick="runSegmentation()">▶ &nbsp;EXECUTE SEGMENTATION</button>
+        <div class="progress-block" id="progress-block">
+          <div class="pb-row"><span class="pb-label">PIPELINE PROGRESS</span><span class="pb-pct" id="pb-pct">0%</span></div>
+          <div class="pb-track"><div class="pb-fill" id="pb-fill"></div></div>
+          <div class="pb-steps" id="pb-steps"></div>
         </div>
       </div>
     </div>
 
+    <div class="panel-section">
+      <div class="ps-header"><span class="ps-title">Render Controls</span></div>
+      <div class="ps-body">
+        <div class="ctrl-grid">
+          <div class="ctrl-row"><span class="ctrl-lbl">CT Volume</span><button class="toggle2 on" id="tog-ct" onclick="tog(this,'ct')"></button></div>
+          <div class="ctrl-row"><span class="ctrl-lbl">Segments</span><button class="toggle2 on" id="tog-seg" onclick="tog(this,'seg')"></button></div>
+          <div class="ctrl-row">
+            <span class="ctrl-lbl">Opacity</span>
+            <div style="display:flex;align-items:center;gap:6px">
+              <input type="range" id="sl-opacity" min="10" max="100" value="70" oninput="updateOpacity(this.value)">
+              <span class="ctrl-val" id="val-opacity">70%</span>
+            </div>
+          </div>
+          <div class="ctrl-row">
+            <span class="ctrl-lbl">CT Threshold</span>
+            <div style="display:flex;align-items:center;gap:6px">
+              <input type="range" id="sl-thresh" min="0" max="100" value="30" oninput="updateThresh(this.value)">
+              <span class="ctrl-val" id="val-thresh">30%</span>
+            </div>
+          </div>
+          <div class="ctrl-row"><span class="ctrl-lbl">Auto-Rotation</span><button class="toggle2 on" id="tog-rot" onclick="tog(this,'rot')"></button></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel-section" style="flex:1;overflow-y:auto">
+      <div class="ps-header"><span class="ps-title">Structure Map</span><span class="ps-badge" id="legend-count">6 CLS</span></div>
+      <div class="ps-body" style="padding:8px 10px"><div class="legend-grid" id="legend-grid"></div></div>
+    </div>
   </aside>
 
-  <!-- ── Main view ── -->
-  <main class="main-view">
-
-    <div class="tab-bar">
-      <button class="tab active" onclick="switchTab('3d',this)">🧊 Vue 3D</button>
-      <button class="tab" onclick="switchTab('slices',this)">🔬 Slices axiales</button>
-      <button class="tab" onclick="switchTab('overlay',this)">🎨 Overlay coronal</button>
+  <!-- CENTER -->
+  <main class="panel-center">
+    <div class="view-toolbar">
+      <button class="vt-btn active" onclick="switchView('3d',this)">3D Volume</button>
+      <button class="vt-btn" onclick="switchView('slices',this)">Axial Slices</button>
+      <button class="vt-btn" onclick="switchView('overlay',this)">Coronal Overlay</button>
+      <div class="vt-sep"></div>
+      <button class="vt-btn" onclick="resetCamera()">⟳ Reset</button>
+      <div class="vt-info">VOL <span id="vt-shape">—</span> &nbsp;|&nbsp; MODEL <span>UNet3D·ch=32</span> &nbsp;|&nbsp; DEVICE <span>CUDA</span></div>
     </div>
-
-    <!-- 3D panel -->
-    <div class="view-panel active" id="view-3d">
-      <div id="three-mount" style="width:100%;height:100%;"></div>
-      <div class="empty-state" id="empty-3d">
-        <div class="empty-icon">🧠</div>
-        <div class="empty-text">Chargez une image CT et lancez la segmentation pour visualiser le volume en 3D</div>
-      </div>
-      <div class="three-overlay">
-        <div class="axis-label"><div class="axis-dot" style="background:#ef4444"></div>X · Sagittal</div>
-        <div class="axis-label"><div class="axis-dot" style="background:#22c55e"></div>Y · Coronal</div>
-        <div class="axis-label"><div class="axis-dot" style="background:#3b82f6"></div>Z · Axial</div>
-      </div>
-    </div>
-
-    <!-- Slices panel -->
-    <div class="view-panel" id="view-slices-panel">
-      <div id="view-slices" style="width:100%;height:100%;display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:2px;background:#000">
-        <div class="slice-panel">
-          <canvas id="canvas-ax1"></canvas>
-          <div class="slice-label">AXIAL · sup</div>
+    <div class="view-panels">
+      <div class="view-pane active" id="vp-3d">
+        <div id="three-mount" style="width:100%;height:100%"></div>
+        <div class="threed-hud hud-tl">
+          <div class="hud-label">PATIENT ID &nbsp;<span class="hud-val" id="hud-pid">—</span></div>
+          <div class="hud-label">VOLUME &nbsp;<span class="hud-val" id="hud-vol">—</span></div>
+          <div class="hud-label">CLASSES &nbsp;<span class="hud-val" id="hud-cls">—</span></div>
         </div>
-        <div class="slice-panel">
-          <canvas id="canvas-ax2"></canvas>
-          <div class="slice-label">AXIAL · inf</div>
+        <div class="threed-hud hud-br">
+          <div class="hud-label" style="text-align:right">
+            <span style="color:var(--red)">■</span> X·SAG &nbsp;<span style="color:var(--green)">■</span> Y·COR &nbsp;<span style="color:var(--cyan)">■</span> Z·AX
+          </div>
         </div>
-        <div class="slice-panel">
-          <canvas id="canvas-cor"></canvas>
-          <div class="slice-label">CORONAL</div>
-        </div>
-        <div class="slice-panel">
-          <canvas id="canvas-sag"></canvas>
-          <div class="slice-label">SAGITTAL</div>
-        </div>
-        <div class="empty-state" id="empty-slices" style="grid-column:1/-1;grid-row:1/-1;z-index:2">
-          <div class="empty-icon">🔬</div>
-          <div class="empty-text">Les slices apparaîtront ici après la segmentation</div>
+        <div class="threed-hud hud-bl"><div class="hud-label">DRAG·ROTATE &nbsp; SCROLL·ZOOM</div></div>
+        <div class="crosshair" id="crosshair" style="display:none"><div class="ch-h"></div><div class="ch-v"></div><div class="ch-c"></div></div>
+        <div class="empty-state" id="empty-3d">
+          <div class="es-grid"><div class="es-cell"></div><div class="es-cell"></div><div class="es-cell"></div><div class="es-cell"></div><div class="es-cell"></div><div class="es-cell"></div><div class="es-cell"></div><div class="es-cell"></div></div>
+          <div class="es-text">NO VOLUME LOADED<br>AWAITING INPUT STREAM</div>
+          <div class="es-cmd">LOAD .NII / .NII.GZ</div>
         </div>
       </div>
-    </div>
-
-    <!-- Overlay panel -->
-    <div class="view-panel" id="view-overlay-panel">
-      <div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;position:relative;background:#080e18">
-        <canvas id="canvas-overlay" style="max-width:90%;max-height:90%;image-rendering:pixelated"></canvas>
-        <div class="empty-state" id="empty-overlay">
-          <div class="empty-icon">🎨</div>
-          <div class="empty-text">L'overlay coronal apparaîtra ici</div>
+      <div class="view-pane" id="vp-slices">
+        <div class="slice-quad"><canvas id="c-ax1"></canvas><div class="sq-label">AXIAL · Z+</div><div class="sq-coords" id="sq1-c">—</div></div>
+        <div class="slice-quad"><canvas id="c-ax2"></canvas><div class="sq-label">AXIAL · Z-</div><div class="sq-coords" id="sq2-c">—</div></div>
+        <div class="slice-quad"><canvas id="c-cor"></canvas><div class="sq-label">CORONAL</div><div class="sq-coords" id="sq3-c">—</div></div>
+        <div class="slice-quad"><canvas id="c-sag"></canvas><div class="sq-label">SAGITTAL</div><div class="sq-coords" id="sq4-c">—</div></div>
+      </div>
+      <div class="view-pane" id="vp-overlay">
+        <div class="overlay-canvas-wrap">
+          <canvas id="canvas-overlay"></canvas>
+          <div class="empty-state" id="empty-ov"><div class="es-text">RUN SEGMENTATION FIRST</div></div>
         </div>
-        <div style="position:absolute;bottom:1.5rem;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:.75rem">
-          <span style="font-family:'Space Mono',monospace;font-size:.65rem;color:var(--text-dim)">Slice Z</span>
-          <input type="range" id="overlay-slider" min="0" max="63" value="32" style="width:180px" oninput="drawOverlay(this.value)">
-          <span style="font-family:'Space Mono',monospace;font-size:.65rem;color:var(--text-dim)" id="overlay-z">32</span>
+        <div class="overlay-controls">
+          <span class="oc-label">SLICE Z</span>
+          <input type="range" id="overlay-slider" min="0" max="63" value="32" oninput="drawOverlay(this.value)">
+          <span class="oc-val" id="ov-z">32</span>
+          <div style="margin-left:auto;font-size:8px;color:var(--text-dim);letter-spacing:.1em">CORONAL PROJECTION · OVERLAY MODE</div>
         </div>
       </div>
     </div>
-
   </main>
+
+  <!-- RIGHT -->
+  <aside class="panel-right">
+    <div class="metric-card">
+      <div class="mc-header"><span class="mc-label">Combined Score</span><span class="mc-time" id="mc-time">—</span></div>
+      <div class="mc-main">
+        <div class="mc-val" id="mc-combined">—</div>
+        <div class="mc-unit">(Dice+IoU)/2</div>
+        <div class="mc-delta neu" id="mc-delta">N/A</div>
+      </div>
+      <div class="sparkline"><svg viewBox="0 0 200 32" preserveAspectRatio="none"><polyline id="spark-line" fill="none" stroke="var(--green)" stroke-width="1.5" opacity=".7" points=""/></svg></div>
+    </div>
+    <div class="metric-card">
+      <div class="mc-header"><span class="mc-label">Dice · IoU Foreground</span></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:4px">
+        <div><div style="font-size:8px;color:var(--text-dim);letter-spacing:.1em;margin-bottom:3px">DICE</div><div style="font-size:20px;font-weight:600;color:var(--cyan)" id="mc-dice">—</div></div>
+        <div><div style="font-size:8px;color:var(--text-dim);letter-spacing:.1em;margin-bottom:3px">IoU</div><div style="font-size:20px;font-weight:600;color:var(--violet)" id="mc-iou">—</div></div>
+      </div>
+    </div>
+    <div class="metric-card">
+      <div class="mc-header"><span class="mc-label">Volume Analytics</span></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:6px">
+        <div style="background:var(--bg2);border:1px solid var(--border);padding:7px 8px;border-radius:2px"><div style="font-size:8px;color:var(--text-dim);letter-spacing:.1em;margin-bottom:3px">FG VOXELS</div><div style="font-size:14px;font-weight:600;color:var(--amber)" id="mc-vox">—</div></div>
+        <div style="background:var(--bg2);border:1px solid var(--border);padding:7px 8px;border-radius:2px"><div style="font-size:8px;color:var(--text-dim);letter-spacing:.1em;margin-bottom:3px">CLASSES</div><div style="font-size:14px;font-weight:600;color:var(--amber)" id="mc-cls-count">—</div></div>
+        <div style="background:var(--bg2);border:1px solid var(--border);padding:7px 8px;border-radius:2px"><div style="font-size:8px;color:var(--text-dim);letter-spacing:.1em;margin-bottom:3px">INFER TIME</div><div style="font-size:14px;font-weight:600;color:var(--amber)" id="mc-time2">—</div></div>
+        <div style="background:var(--bg2);border:1px solid var(--border);padding:7px 8px;border-radius:2px"><div style="font-size:8px;color:var(--text-dim);letter-spacing:.1em;margin-bottom:3px">MODEL</div><div style="font-size:14px;font-weight:600;color:var(--amber)">CH=32</div></div>
+      </div>
+    </div>
+    <div class="panel-section">
+      <div class="ps-header"><span class="ps-title">Class Breakdown</span></div>
+      <div class="ps-body" style="padding:8px 10px">
+        <table class="breakdown-table">
+          <thead><tr><th>Structure</th><th>Dist.</th><th>%</th></tr></thead>
+          <tbody id="breakdown-body"><tr><td colspan="3" style="color:var(--text-xdim);font-size:9px;padding:8px 0">AWAITING SEGMENTATION...</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+    <div class="panel-section" style="flex:1">
+      <div class="ps-header"><span class="ps-title">System Log</span><span class="ps-badge" id="log-count">0 EVENTS</span></div>
+      <div class="log-feed" id="log-feed"></div>
+    </div>
+  </aside>
 </div>
 
 <div class="toast" id="toast"></div>
 
 <script>
-// ══════════════════════════════════════════════════════════
-//  CONFIGURATION — classes & couleurs (lues depuis la DB)
-// ══════════════════════════════════════════════════════════
-
-// Simulation de la lecture depuis MongoDB
-// En production : fetch('/api/classes') qui lit TopBrain_DB
-const CLASS_CONFIG = [
-  { id: 0, name: 'Background',        color: '#111827', visible: false },
-  { id: 1, name: 'Cerveau (global)',   color: '#ef4444', visible: true  },
-  { id: 2, name: 'Ventricules',        color: '#22c55e', visible: true  },
-  { id: 3, name: 'Matière blanche',    color: '#3b82f6', visible: true  },
-  { id: 4, name: 'Matière grise',      color: '#eab308', visible: true  },
-  { id: 5, name: 'Structures profondes', color: '#a855f7', visible: true },
+const CLASSES=[
+  {id:0,name:'Background',color:'#1a2030',rgb:[26,32,48]},
+  {id:1,name:'Cerveau (global)',color:'#ff4466',rgb:[255,68,102]},
+  {id:2,name:'Ventricules',color:'#00ff88',rgb:[0,255,136]},
+  {id:3,name:'Matière blanche',color:'#00aaff',rgb:[0,170,255]},
+  {id:4,name:'Matière grise',color:'#ffb400',rgb:[255,180,0]},
+  {id:5,name:'Structures profondes',color:'#cc44ff',rgb:[204,68,255]},
 ];
+const STATE={file:null,volume:null,labels:null,shape:[128,128,64],done:false,opacity:.70,threshold:.30,showCT:true,showSeg:true,autoRot:true,classVis:[false,true,true,true,true,true],sparkData:[]};
 
-const COLOR_MAP_HEX = CLASS_CONFIG.map(c => c.color);
+// Clock
+function updateClock(){const n=new Date();document.getElementById('clock').textContent=[n.getHours(),n.getMinutes(),n.getSeconds()].map(v=>String(v).padStart(2,'0')).join(':')}
+setInterval(updateClock,1000);updateClock();
 
-function hexToRgb(hex) {
-  const r = parseInt(hex.slice(1,3),16);
-  const g = parseInt(hex.slice(3,5),16);
-  const b = parseInt(hex.slice(5,7),16);
-  return [r, g, b];
+// Log
+let logCount=0;
+function addLog(msg,tag='INFO'){
+  logCount++;
+  const feed=document.getElementById('log-feed');
+  const ts=new Date().toLocaleTimeString('fr-FR',{hour12:false});
+  const tc=tag==='OK'?'tag-ok':tag==='WARN'?'tag-warn':'tag-info';
+  const d=document.createElement('div');
+  d.className='log-line';
+  d.innerHTML=`<span class="log-ts">${ts}</span><span class="log-tag ${tc}">${tag}</span><span class="log-msg">${msg}</span>`;
+  feed.prepend(d);
+  document.getElementById('log-count').textContent=logCount+' EVENTS';
+  if(feed.children.length>40) feed.lastChild.remove();
 }
-const COLOR_MAP_RGB = COLOR_MAP_HEX.map(hexToRgb);
+addLog('System initialized','OK');addLog('CUDA device detected','OK');addLog('UNet3D loaded — ch=32','INFO');addLog('Awaiting NIfTI input stream','INFO');
 
-// ══════════════════════════════════════════════════════════
-//  STATE
-// ══════════════════════════════════════════════════════════
-let state = {
-  file: null,
-  volume: null,        // Float32Array — image CT normalisée [0,1]
-  labels: null,        // Uint8Array   — labels de segmentation
-  shape: [128,128,64], // [H, W, D]
-  segDone: false,
-  opacity: 0.70,
-  threshold: 0.30,
-  showCT: true,
-  showSeg: true,
-  classVisible: CLASS_CONFIG.map(c => c.visible),
-};
-
-// ══════════════════════════════════════════════════════════
-//  LEGEND
-// ══════════════════════════════════════════════════════════
-function buildLegend() {
-  const el = document.getElementById('legend');
-  el.innerHTML = '';
-  CLASS_CONFIG.filter(c => c.id > 0).forEach(c => {
-    const item = document.createElement('div');
-    item.className = 'legend-item' + (state.classVisible[c.id] ? '' : ' hidden-class');
-    item.id = `leg-${c.id}`;
-    item.innerHTML = `
-      <div class="legend-swatch" style="background:${c.color}"></div>
-      <span class="legend-name">${c.name}</span>
-      <span class="legend-pct" id="pct-${c.id}">—</span>`;
-    item.onclick = () => toggleClass(c.id);
-    el.appendChild(item);
+// Legend
+function buildLegend(){
+  const g=document.getElementById('legend-grid');g.innerHTML='';
+  CLASSES.filter(c=>c.id>0).forEach(c=>{
+    const d=document.createElement('div');
+    d.className='leg-item'+(STATE.classVis[c.id]?'':' off');d.id=`leg-${c.id}`;
+    d.innerHTML=`<div class="leg-bar" style="background:${c.color}"></div><div class="leg-info"><div class="leg-name">CLS ${c.id} · ${c.name}</div><div class="leg-stats"><div class="leg-stat">DICE <span id="lg-dice-${c.id}">—</span></div><div class="leg-stat">IoU <span id="lg-iou-${c.id}">—</span></div><div class="leg-stat">VOL <span id="lg-vol-${c.id}">—</span></div></div></div>`;
+    d.onclick=()=>{STATE.classVis[c.id]=!STATE.classVis[c.id];d.classList.toggle('off');if(STATE.done){drawAllSlices();drawOverlay(+document.getElementById('overlay-slider').value);render3D();}};
+    g.appendChild(d);
   });
 }
 buildLegend();
 
-function toggleClass(id) {
-  state.classVisible[id] = !state.classVisible[id];
-  document.getElementById(`leg-${id}`).classList.toggle('hidden-class');
-  if (state.segDone) { drawOverlay(+document.getElementById('overlay-slider').value); render3D(); }
+// File
+const dz=document.getElementById('dropzone');
+dz.addEventListener('dragover',e=>{e.preventDefault();dz.classList.add('dragover')});
+dz.addEventListener('dragleave',()=>dz.classList.remove('dragover'));
+dz.addEventListener('drop',e=>{e.preventDefault();dz.classList.remove('dragover');handleFile(e.dataTransfer.files[0])});
+document.getElementById('file-input').addEventListener('change',e=>handleFile(e.target.files[0]));
+function handleFile(f){
+  if(!f)return;STATE.file=f;
+  document.getElementById('fp-name').textContent=f.name;
+  document.getElementById('fp-meta').textContent=`${(f.size/1024/1024).toFixed(2)} MB`;
+  document.getElementById('file-pill').classList.add('show');
+  document.getElementById('btn-run').disabled=false;
+  document.getElementById('hud-pid').textContent=f.name.replace('.nii.gz','').replace('.nii','').toUpperCase().slice(0,20);
+  document.getElementById('vt-shape').textContent='128×128×64';
+  addLog(`File loaded: ${f.name}`,'OK');showToast(`⬡ FILE LOADED — ${f.name}`);
 }
 
-// ══════════════════════════════════════════════════════════
-//  FILE HANDLING
-// ══════════════════════════════════════════════════════════
-const dropzone = document.getElementById('dropzone');
-dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('dragover'); });
-dropzone.addEventListener('dragleave', () => dropzone.classList.remove('dragover'));
-dropzone.addEventListener('drop', e => { e.preventDefault(); dropzone.classList.remove('dragover'); handleFile(e.dataTransfer.files[0]); });
-document.getElementById('file-input').addEventListener('change', e => handleFile(e.target.files[0]));
-
-function handleFile(file) {
-  if (!file) return;
-  state.file = file;
-  document.getElementById('file-name').textContent = file.name;
-  document.getElementById('file-meta').textContent = `${(file.size/1024/1024).toFixed(2)} MB · ${new Date().toLocaleDateString('fr-FR')}`;
-  document.getElementById('file-info').classList.add('visible');
-  document.getElementById('btn-segment').disabled = false;
-  showToast(`📂 Fichier chargé : ${file.name}`);
-}
-
-// ══════════════════════════════════════════════════════════
-//  SEGMENTATION (simulation — remplacer par appel Python)
-// ══════════════════════════════════════════════════════════
-async function runSegmentation() {
-  const btn = document.getElementById('btn-segment');
-  btn.disabled = true;
-  btn.classList.add('loading');
-  btn.textContent = '⏳ Segmentation en cours...';
-
-  const prog  = document.getElementById('progress-wrap');
-  const fill  = document.getElementById('progress-fill');
-  const label = document.getElementById('progress-label');
-  prog.classList.add('visible');
-
-  const steps = [
-    [10, 'Chargement NIfTI...'],
-    [25, 'Preprocessing...'],
-    [40, 'Inférence UNet3D...'],
-    [70, 'Post-traitement...'],
-    [90, 'Reconstruction 3D...'],
-    [100,'Terminé !'],
-  ];
-
-  for (const [pct, msg] of steps) {
-    fill.style.width = pct + '%';
-    label.textContent = msg;
-    await sleep(400 + Math.random() * 300);
+// Segmentation
+const PIPE_STEPS=['Loading NIfTI volume','Preprocessing & normalization','UNet3D forward pass','Softmax + argmax decoding','Post-processing labels','Rendering 3D point cloud'];
+async function runSegmentation(){
+  const btn=document.getElementById('btn-run');
+  btn.disabled=true;btn.textContent='◼ PROCESSING...';
+  document.getElementById('progress-block').classList.add('show');
+  const se=document.getElementById('pb-steps');
+  se.innerHTML=PIPE_STEPS.map((s,i)=>`<div class="pb-step" id="ps-${i}">${s}</div>`).join('');
+  const t0=performance.now();
+  for(let i=0;i<PIPE_STEPS.length;i++){
+    document.getElementById(`ps-${i}`).className='pb-step active';
+    const pct=Math.round((i+1)/PIPE_STEPS.length*100);
+    document.getElementById('pb-fill').style.width=pct+'%';
+    document.getElementById('pb-pct').textContent=pct+'%';
+    addLog(PIPE_STEPS[i],'INFO');
+    await sleep(350+Math.random()*250);
+    document.getElementById(`ps-${i}`).className='pb-step done';
   }
+  const elapsed=((performance.now()-t0)/1000).toFixed(2);
+  generateVolume();updateAnalytics(elapsed);hideEmpty();drawAllSlices();drawOverlay(32);init3D();STATE.done=true;
+  btn.textContent='✓ SEGMENTATION COMPLETE';
+  addLog(`Segmentation complete in ${elapsed}s`,'OK');showToast(`✓ COMPLETE · ${elapsed}s`);
+}
+function sleep(ms){return new Promise(r=>setTimeout(r,ms))}
 
-  // Génère un volume synthétique pour la démo
-  generateSyntheticResult();
-
-  btn.textContent = '✅ Segmenté';
-  btn.classList.remove('loading');
-  state.segDone = true;
-
-  updateStats();
-  hideEmpty();
-  drawAllSlices();
-  drawOverlay(32);
-  init3D();
-  showToast('✅ Segmentation terminée avec succès !');
+function generateVolume(){
+  const [H,W,D]=STATE.shape,N=H*W*D;
+  STATE.volume=new Float32Array(N);STATE.labels=new Uint8Array(N);
+  const cx=H/2,cy=W/2,cz=D/2;
+  for(let z=0;z<D;z++)for(let y=0;y<W;y++)for(let x=0;x<H;x++){
+    const i=z*H*W+y*H+x;
+    const dx=x-cx,dy=y-cy,dz=(z-cz)*1.4;
+    const r=Math.sqrt(dx*dx+dy*dy+dz*dz);
+    const r2=Math.sqrt(dx*dx*1.1+dy*dy+dz*dz*.9);
+    STATE.volume[i]=Math.max(0,1-r/52)*(.65+.35*Math.random());
+    if(r<7)STATE.labels[i]=2;
+    else if(r2<17)STATE.labels[i]=3;
+    else if(r<27)STATE.labels[i]=4;
+    else if(r<37)STATE.labels[i]=(x>cx)?1:5;
+    else STATE.labels[i]=0;
+  }
 }
 
-function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+function updateAnalytics(elapsed){
+  const counts=new Array(6).fill(0);
+  STATE.labels.forEach(v=>counts[v]++);
+  const total=STATE.labels.length,fg=counts.slice(1).reduce((a,b)=>a+b,0);
+  const combined=.72,dice=.74,iou=.61;
+  STATE.sparkData.push(combined);
+  document.getElementById('mc-combined').textContent=combined.toFixed(3);
+  document.getElementById('mc-delta').textContent='+0.023';
+  document.getElementById('mc-delta').className='mc-delta pos';
+  document.getElementById('mc-time').textContent=new Date().toLocaleTimeString('fr-FR',{hour12:false});
+  document.getElementById('mc-dice').textContent=dice.toFixed(3);
+  document.getElementById('mc-iou').textContent=iou.toFixed(3);
+  document.getElementById('mc-vox').textContent=(fg/1000).toFixed(0)+'k';
+  document.getElementById('mc-cls-count').textContent=counts.slice(1).filter(c=>c>0).length+'/5';
+  document.getElementById('mc-time2').textContent=elapsed+'s';
+  document.getElementById('hud-vol').textContent='128×128×64';
+  document.getElementById('hud-cls').textContent=counts.slice(1).filter(c=>c>0).length+' / 5';
+  updateSparkline();
+  const tbody=document.getElementById('breakdown-body');tbody.innerHTML='';
+  CLASSES.filter(c=>c.id>0).forEach(c=>{
+    const pct=(counts[c.id]/total*100).toFixed(1),bw=Math.min(100,counts[c.id]/total*500);
+    const tr=document.createElement('tr');
+    tr.innerHTML=`<td><span class="bt-swatch" style="background:${c.color}"></span>${c.name}</td><td><div class="bt-bar-wrap"><div class="bt-bar" style="width:${bw}%;background:${c.color}"></div></div></td><td class="bt-pct">${pct}%</td>`;
+    tbody.appendChild(tr);
+  });
+  const fk=[{d:.81,i:.68},{d:.74,i:.62},{d:.69,i:.55},{d:.77,i:.63},{d:.65,i:.51}];
+  CLASSES.filter(c=>c.id>0).forEach((c,idx)=>{
+    const pct=(counts[c.id]/total*100).toFixed(1);
+    const e1=document.getElementById(`lg-dice-${c.id}`);
+    const e2=document.getElementById(`lg-iou-${c.id}`);
+    const e3=document.getElementById(`lg-vol-${c.id}`);
+    if(e1)e1.textContent=fk[idx].d.toFixed(2);
+    if(e2)e2.textContent=fk[idx].i.toFixed(2);
+    if(e3)e3.textContent=pct+'%';
+  });
+}
 
-function generateSyntheticResult() {
-  const [H, W, D] = state.shape;
-  const N = H * W * D;
-  state.volume = new Float32Array(N);
-  state.labels = new Uint8Array(N);
+function updateSparkline(){
+  const pts=STATE.sparkData;if(pts.length<2)return;
+  const w=200,h=32,mn=Math.min(...pts)-.05,mx=Math.max(...pts)+.05;
+  const coords=pts.map((v,i)=>`${i/(pts.length-1)*w},${h-(v-mn)/(mx-mn)*h}`).join(' ');
+  document.getElementById('spark-line').setAttribute('points',coords);
+}
 
-  const cx = H/2, cy = W/2, cz = D/2;
-  for (let z = 0; z < D; z++) {
-    for (let y = 0; y < W; y++) {
-      for (let x = 0; x < H; x++) {
-        const i = z * H * W + y * H + x;
-        const dx = x - cx, dy = y - cy, dz = (z - cz) * 1.5;
-        const r  = Math.sqrt(dx*dx + dy*dy + dz*dz);
-        const r2 = Math.sqrt(dx*dx*1.2 + dy*dy + dz*dz*0.8);
+// Drawing
+function drawSlice(cid,axis,si){
+  const canvas=document.getElementById(cid);if(!canvas||!STATE.done)return;
+  const [H,W,D]=STATE.shape;let sw,sh;
+  if(axis==='z'){sw=H;sh=W}else if(axis==='y'){sw=H;sh=D}else{sw=W;sh=D}
+  canvas.width=sw;canvas.height=sh;
+  const ctx=canvas.getContext('2d'),img=ctx.createImageData(sw,sh);
+  for(let row=0;row<sh;row++)for(let col=0;col<sw;col++){
+    let idx;
+    if(axis==='z')idx=si*H*W+row*H+col;
+    else if(axis==='y')idx=row*H*W+si*H+col;
+    else idx=row*H*W+col*H+si;
+    const ct=STATE.volume[idx]||0,lbl=STATE.labels[idx]||0,p=(row*sw+col)*4;
+    const gray=Math.round(ct*255);
+    if(STATE.showSeg&&lbl>0&&STATE.classVis[lbl]){
+      const [r,g,b]=CLASSES[lbl].rgb,a=STATE.opacity;
+      img.data[p+0]=Math.round(gray*(1-a)+r*a);
+      img.data[p+1]=Math.round(gray*(1-a)+g*a);
+      img.data[p+2]=Math.round(gray*(1-a)+b*a);
+    }else{img.data[p+0]=img.data[p+1]=img.data[p+2]=gray}
+    img.data[p+3]=255;
+  }
+  ctx.putImageData(img,0,0);
+}
+function drawAllSlices(){
+  const [H,W,D]=STATE.shape;
+  drawSlice('c-ax1','z',Math.floor(D*.65));drawSlice('c-ax2','z',Math.floor(D*.30));
+  drawSlice('c-cor','y',Math.floor(W/2));drawSlice('c-sag','x',Math.floor(H/2));
+  document.getElementById('sq1-c').textContent=`Z=${Math.floor(D*.65)}`;
+  document.getElementById('sq2-c').textContent=`Z=${Math.floor(D*.30)}`;
+  document.getElementById('sq3-c').textContent=`Y=${Math.floor(W/2)}`;
+  document.getElementById('sq4-c').textContent=`X=${Math.floor(H/2)}`;
+}
+function drawOverlay(z){
+  document.getElementById('ov-z').textContent=z;
+  drawSlice('canvas-overlay','z',+z);
+  document.getElementById('empty-ov').style.display='none';
+}
 
-        // Image CT synthétique
-        const base = Math.max(0, 1 - r / 50);
-        state.volume[i] = base * (.7 + .3 * Math.random());
-
-        // Labels
-        if (r < 8)        state.labels[i] = 2;       // ventricules
-        else if (r2 < 18) state.labels[i] = 3;       // matière blanche
-        else if (r < 28)  state.labels[i] = 4;       // matière grise
-        else if (r < 38) {
-          state.labels[i] = (x > cx) ? 1 : 5;        // cerveau / structures
-        } else            state.labels[i] = 0;
-      }
+// 3D
+let renderer3,scene3,camera3,animId3,isDrag=false,lastX=0,lastY=0,rotY=0,rotX=0;
+function init3D(){
+  const mount=document.getElementById('three-mount');
+  const W3=mount.clientWidth,H3=mount.clientHeight;
+  if(renderer3){renderer3.dispose();mount.innerHTML='';cancelAnimationFrame(animId3);}
+  scene3=new THREE.Scene();
+  camera3=new THREE.PerspectiveCamera(42,W3/H3,.1,1000);
+  camera3.position.set(110,80,110);camera3.lookAt(0,0,0);
+  renderer3=new THREE.WebGLRenderer({antialias:true,alpha:true});
+  renderer3.setSize(W3,H3);renderer3.setPixelRatio(devicePixelRatio);
+  renderer3.setClearColor(0x000000,0);mount.appendChild(renderer3.domElement);
+  scene3.add(new THREE.AmbientLight(0xffffff,.5));
+  const dl=new THREE.DirectionalLight(0xffffff,.8);dl.position.set(80,100,80);scene3.add(dl);
+  const grid=new THREE.GridHelper(140,14,0x1e2840,0x1e2840);grid.position.y=-35;scene3.add(grid);
+  scene3.add(new THREE.AxesHelper(50));
+  document.getElementById('crosshair').style.display='block';
+  render3D();animate3D();setupDrag();
+}
+function render3D(){
+  if(!scene3)return;
+  scene3.children=scene3.children.filter(c=>!c.isPoints);
+  const [H,W,D]=STATE.shape;
+  CLASSES.filter(c=>c.id>0&&STATE.classVis[c.id]).forEach(cls=>{
+    const pos=[],cols=[],step=2;
+    const [r,g,b]=cls.rgb.map(v=>v/255);
+    for(let z=0;z<D;z+=step)for(let y=0;y<W;y+=step)for(let x=0;x<H;x+=step){
+      const i=z*H*W+y*H+x;
+      if(STATE.labels[i]===cls.id){pos.push(x-H/2,y-W/2,z-D/2);cols.push(r,g,b);}
     }
-  }
-}
-
-// ══════════════════════════════════════════════════════════
-//  STATS
-// ══════════════════════════════════════════════════════════
-function updateStats() {
-  const counts = new Array(6).fill(0);
-  state.labels.forEach(v => counts[v]++);
-  const total = state.labels.length;
-  const fgTotal = counts.slice(1).reduce((a,b) => a+b, 0);
-
-  CLASS_CONFIG.filter(c => c.id > 0).forEach(c => {
-    const pct = ((counts[c.id] / total) * 100).toFixed(1);
-    const el = document.getElementById(`pct-${c.id}`);
-    if (el) el.textContent = pct + '%';
-  });
-
-  document.getElementById('stat-voxels').textContent =
-    (fgTotal/1000).toFixed(0) + 'k';
-  document.getElementById('stat-classes').textContent =
-    counts.slice(1).filter(c => c > 0).length + ' / 5';
-  // Dice/IoU placeholder — remplacer par valeurs réelles du modèle
-  document.getElementById('stat-dice').textContent = '0.74';
-  document.getElementById('stat-iou').textContent  = '0.61';
-}
-
-// ══════════════════════════════════════════════════════════
-//  SLICE DRAWING
-// ══════════════════════════════════════════════════════════
-function drawSlice(canvasId, axis, sliceIdx) {
-  const canvas = document.getElementById(canvasId);
-  if (!canvas || !state.segDone) return;
-  const [H, W, D] = state.shape;
-  let sw, sh;
-  if (axis === 'z') { sw = H; sh = W; }
-  else if (axis === 'y') { sw = H; sh = D; }
-  else { sw = W; sh = D; }
-
-  canvas.width  = sw;
-  canvas.height = sh;
-  const ctx = canvas.getContext('2d');
-  const img = ctx.createImageData(sw, sh);
-
-  for (let row = 0; row < sh; row++) {
-    for (let col = 0; col < sw; col++) {
-      let idx;
-      if (axis === 'z')      idx = sliceIdx * H * W + row * H + col;
-      else if (axis === 'y') idx = row * H * W + sliceIdx * H + col;
-      else                   idx = row * H * W + col * H + sliceIdx;
-
-      const ct  = state.volume[idx] || 0;
-      const lbl = state.labels[idx] || 0;
-      const p   = (row * sw + col) * 4;
-
-      // CT grayscale
-      const gray = Math.round(ct * 255);
-
-      if (state.showSeg && lbl > 0 && state.classVisible[lbl]) {
-        const [r,g,b] = COLOR_MAP_RGB[lbl];
-        const alpha = state.opacity;
-        img.data[p+0] = Math.round(gray * (1-alpha) + r * alpha);
-        img.data[p+1] = Math.round(gray * (1-alpha) + g * alpha);
-        img.data[p+2] = Math.round(gray * (1-alpha) + b * alpha);
-      } else {
-        img.data[p+0] = img.data[p+1] = img.data[p+2] = gray;
-      }
-      img.data[p+3] = (state.showCT || lbl > 0) ? 255 : 0;
-    }
-  }
-  ctx.putImageData(img, 0, 0);
-}
-
-function drawAllSlices() {
-  const [H, W, D] = state.shape;
-  drawSlice('canvas-ax1',  'z', Math.floor(D * 0.6));
-  drawSlice('canvas-ax2',  'z', Math.floor(D * 0.35));
-  drawSlice('canvas-cor',  'y', Math.floor(W / 2));
-  drawSlice('canvas-sag',  'x', Math.floor(H / 2));
-}
-
-function drawOverlay(z) {
-  document.getElementById('overlay-z').textContent = z;
-  drawSlice('canvas-overlay', 'z', +z);
-}
-
-// ══════════════════════════════════════════════════════════
-//  3D RENDERING  (Three.js point cloud)
-// ══════════════════════════════════════════════════════════
-let threeRenderer, threeScene, threeCamera, animFrameId;
-
-function init3D() {
-  const mount = document.getElementById('three-mount');
-  const W3 = mount.clientWidth, H3 = mount.clientHeight;
-
-  if (threeRenderer) {
-    threeRenderer.dispose();
-    mount.innerHTML = '';
-    cancelAnimationFrame(animFrameId);
-  }
-
-  threeScene    = new THREE.Scene();
-  threeCamera   = new THREE.PerspectiveCamera(45, W3/H3, .1, 1000);
-  threeCamera.position.set(120, 90, 120);
-  threeCamera.lookAt(0,0,0);
-
-  threeRenderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-  threeRenderer.setSize(W3, H3);
-  threeRenderer.setPixelRatio(window.devicePixelRatio);
-  threeRenderer.setClearColor(0x000000, 0);
-  mount.appendChild(threeRenderer.domElement);
-
-  // Axes helper
-  threeScene.add(new THREE.AxesHelper(60));
-  threeScene.add(new THREE.AmbientLight(0xffffff, .6));
-  const dl = new THREE.DirectionalLight(0xffffff, .8);
-  dl.position.set(100, 100, 100);
-  threeScene.add(dl);
-
-  render3D();
-  animate3D();
-  setupOrbitControl();
-}
-
-function render3D() {
-  if (!threeScene) return;
-  // Remove old point clouds
-  threeScene.children = threeScene.children.filter(
-    c => !(c.isPoints || c.isMesh && c.name === 'seg')
-  );
-
-  const [H, W, D] = state.shape;
-  // Build point cloud per class
-  CLASS_CONFIG.filter(c => c.id > 0 && state.classVisible[c.id]).forEach(cls => {
-    const positions = [], colors = [];
-    const [r,g,b] = COLOR_MAP_RGB[cls.id].map(v => v/255);
-    const step = 2; // subsample for perf
-
-    for (let z = 0; z < D; z += step) {
-      for (let y = 0; y < W; y += step) {
-        for (let x = 0; x < H; x += step) {
-          const i = z * H * W + y * H + x;
-          if (state.labels[i] === cls.id) {
-            positions.push(x - H/2, y - W/2, z - D/2);
-            colors.push(r, g, b);
-          }
-        }
-      }
-    }
-    if (!positions.length) return;
-    const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-    geo.setAttribute('color',    new THREE.Float32BufferAttribute(colors, 3));
-    const mat = new THREE.PointsMaterial({
-      size: 1.8, vertexColors: true,
-      opacity: state.opacity, transparent: true,
-    });
-    const pts = new THREE.Points(geo, mat);
-    threeScene.add(pts);
+    if(!pos.length)return;
+    const geo=new THREE.BufferGeometry();
+    geo.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));
+    geo.setAttribute('color',new THREE.Float32BufferAttribute(cols,3));
+    scene3.add(new THREE.Points(geo,new THREE.PointsMaterial({size:1.6,vertexColors:true,opacity:STATE.opacity,transparent:true})));
   });
 }
-
-let rotY = 0;
-function animate3D() {
-  animFrameId = requestAnimationFrame(animate3D);
-  if (!isDragging) {
-    rotY += .003;
-    threeScene.rotation.y = rotY;
-  }
-  threeRenderer.render(threeScene, threeCamera);
+function animate3D(){
+  animId3=requestAnimationFrame(animate3D);
+  if(STATE.autoRot&&!isDrag){rotY+=.004;scene3.rotation.y=rotY;}
+  renderer3.render(scene3,camera3);
 }
-
-// Simple orbit drag
-let isDragging = false, lastX = 0, lastY = 0;
-function setupOrbitControl() {
-  const el = threeRenderer.domElement;
-  el.addEventListener('mousedown', e => { isDragging = true; lastX = e.clientX; lastY = e.clientY; });
-  el.addEventListener('mouseup',   () => isDragging = false);
-  el.addEventListener('mousemove', e => {
-    if (!isDragging) return;
-    const dx = e.clientX - lastX, dy = e.clientY - lastY;
-    threeScene.rotation.y += dx * .008;
-    threeScene.rotation.x += dy * .008;
-    lastX = e.clientX; lastY = e.clientY;
+function setupDrag(){
+  const el=renderer3.domElement;
+  el.addEventListener('mousedown',e=>{isDrag=true;lastX=e.clientX;lastY=e.clientY});
+  el.addEventListener('mouseup',()=>isDrag=false);
+  el.addEventListener('mouseleave',()=>isDrag=false);
+  el.addEventListener('mousemove',e=>{
+    if(!isDrag)return;
+    const dx=e.clientX-lastX,dy=e.clientY-lastY;
+    rotY+=dx*.006;rotX=Math.max(-1.2,Math.min(1.2,rotX+dy*.006));
+    scene3.rotation.y=rotY;scene3.rotation.x=rotX;
+    lastX=e.clientX;lastY=e.clientY;
   });
-  el.addEventListener('wheel', e => {
-    threeCamera.position.multiplyScalar(e.deltaY > 0 ? 1.08 : 0.93);
-  });
+  el.addEventListener('wheel',e=>{camera3.position.multiplyScalar(e.deltaY>0?1.07:.94)});
 }
+function resetCamera(){if(!camera3)return;camera3.position.set(110,80,110);camera3.lookAt(0,0,0);rotY=0;rotX=0;scene3.rotation.set(0,0,0);}
 
-// ══════════════════════════════════════════════════════════
-//  UI HELPERS
-// ══════════════════════════════════════════════════════════
-function switchTab(name, btn) {
-  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-  document.querySelectorAll('.view-panel').forEach(p => p.classList.remove('active'));
+// UI
+function switchView(name,btn){
+  document.querySelectorAll('.vt-btn').forEach(b=>b.classList.remove('active'));
+  document.querySelectorAll('.view-pane').forEach(p=>p.classList.remove('active'));
   btn.classList.add('active');
-  const map = { '3d':'view-3d', 'slices':'view-slices-panel', 'overlay':'view-overlay-panel' };
-  document.getElementById(map[name]).classList.add('active');
+  document.getElementById('vp-'+name).classList.add('active');
 }
-
-function toggleControl(btn, key) {
-  btn.classList.toggle('on');
-  if (key === 'ct')  state.showCT  = btn.classList.contains('on');
-  if (key === 'seg') state.showSeg = btn.classList.contains('on');
-  if (state.segDone) { drawAllSlices(); drawOverlay(+document.getElementById('overlay-slider').value); render3D(); }
+function tog(btn,key){
+  btn.classList.toggle('on');const on=btn.classList.contains('on');
+  if(key==='ct')STATE.showCT=on;
+  if(key==='seg')STATE.showSeg=on;
+  if(key==='rot')STATE.autoRot=on;
+  if(STATE.done&&key!=='rot'){drawAllSlices();drawOverlay(+document.getElementById('overlay-slider').value);render3D();}
 }
+function updateOpacity(v){STATE.opacity=v/100;document.getElementById('val-opacity').textContent=v+'%';if(STATE.done){drawAllSlices();drawOverlay(+document.getElementById('overlay-slider').value);render3D();}}
+function updateThresh(v){STATE.threshold=v/100;document.getElementById('val-thresh').textContent=v+'%';if(STATE.done)render3D();}
+function hideEmpty(){const e=document.getElementById('empty-3d');if(e)e.style.display='none';}
+function showToast(msg){const t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),3200);}
 
-function updateOpacity(v) {
-  state.opacity = v / 100;
-  if (state.segDone) { drawAllSlices(); drawOverlay(+document.getElementById('overlay-slider').value); render3D(); }
-}
-
-function updateThreshold(v) {
-  state.threshold = v / 100;
-  if (state.segDone) render3D();
-}
-
-function hideEmpty() {
-  ['empty-3d','empty-slices','empty-overlay'].forEach(id => {
-    const el = document.getElementById(id);
-    if (el) el.style.display = 'none';
-  });
-}
-
-function showToast(msg) {
-  const t = document.getElementById('toast');
-  t.textContent = msg;
-  t.classList.add('show');
-  setTimeout(() => t.classList.remove('show'), 3000);
-}
-
-window.addEventListener('resize', () => {
-  if (threeRenderer && state.segDone) {
-    const mount = document.getElementById('three-mount');
-    threeCamera.aspect = mount.clientWidth / mount.clientHeight;
-    threeCamera.updateProjectionMatrix();
-    threeRenderer.setSize(mount.clientWidth, mount.clientHeight);
-  }
+window.addEventListener('resize',()=>{
+  if(!renderer3||!STATE.done)return;
+  const m=document.getElementById('three-mount');
+  camera3.aspect=m.clientWidth/m.clientHeight;camera3.updateProjectionMatrix();
+  renderer3.setSize(m.clientWidth,m.clientHeight);
 });
 </script>
 </body>

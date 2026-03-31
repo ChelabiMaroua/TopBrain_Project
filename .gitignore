@@ -19,3 +19,11 @@ logs/
 # Generated output
 Graphs/
 Reconstruction/
+
+# Local MongoDB runtime/storage artifacts
+.mongo-data/
+.mongo-log/
+
+# Local datasets and archives
+data/raw/
+*.zip

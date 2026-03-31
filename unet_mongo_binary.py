@@ -1,26 +1,3 @@
-"""
-unet_mongo_binary.py — Pipeline 3: MongoDB Binary Volume Storage
-================================================================
-Stores pre-processed, pre-normalized volumetric data as raw bytes in MongoDB.
-This eliminates all per-epoch I/O and preprocessing cost after an initial
-one-time population step.
-
-Trade-offs vs the other pipelines
-----------------------------------
-+ Zero preprocessing cost during training (resize + normalize done once).
-+ Exact pixel-perfect label fidelity (bytes round-trip is lossless).
-+ Excellent scalability: volumes at multiple resolutions can be stored
-  independently, requiring only a size-key lookup at runtime.
-- One-time population is slow (all volumes must be serialized upfront).
-- Storage footprint is large (full float32 + int64 voxel arrays).
-- Requires a running MongoDB instance.
-
-Usage
------
-python unet_mongo_binary.py --patient-ids 001,002 \
-    --target-size 128 128 64 --epochs 5
-"""
-
 import argparse
 import os
 import random
@@ -32,6 +9,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 from dotenv import load_dotenv
+from ETL.Transform.transform_t3_normalization import normalize_volume
 from pymongo import MongoClient
 from pymongo.errors import ServerSelectionTimeoutError
 from torch.utils.data import DataLoader, Dataset
@@ -48,6 +26,8 @@ SOURCE_IMAGE_DIR  = os.getenv("TOPBRAIN_IMAGE_DIR", "")
 SOURCE_LABEL_DIR  = os.getenv("TOPBRAIN_LABEL_DIR", "")
 
 MAX_LABEL = 5
+NORM_WINDOW_MIN = -100.0
+NORM_WINDOW_MAX = 400.0
 
 
 # ---------------------------------------------------------------------------
@@ -136,14 +116,6 @@ def resize_volume(
     return zoom(volume, zoom_factors, order=order)
 
 
-def normalize_volume(volume: np.ndarray) -> np.ndarray:
-    """Min-max normalize to [0, 1]."""
-    vmin, vmax = volume.min(), volume.max()
-    if vmax - vmin > 0:
-        return (volume - vmin) / (vmax - vmin)
-    return volume
-
-
 # ---------------------------------------------------------------------------
 # MongoDB population  (one-time, upfront cost)
 # ---------------------------------------------------------------------------
@@ -187,7 +159,7 @@ def ensure_binary_collection_populated(
         # Resize + normalize done here once — zero cost at training time
         img = resize_volume(img, target_size, is_label=False)
         lbl = resize_volume(lbl, target_size, is_label=True)
-        img = normalize_volume(img)
+        img = normalize_volume(img, window_min=NORM_WINDOW_MIN, window_max=NORM_WINDOW_MAX)
 
         # Store dtype explicitly so deserialization is self-describing
         collection.insert_one({

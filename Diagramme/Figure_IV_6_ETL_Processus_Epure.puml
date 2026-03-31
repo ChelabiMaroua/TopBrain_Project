@@ -1,0 +1,54 @@
+@startuml
+caption Figure IV-6 : Processus ETL (hybride compact)
+
+skinparam shadowing false
+skinparam packageStyle rectangle
+skinparam componentStyle rectangle
+skinparam defaultTextAlignment center
+skinparam linetype ortho
+
+' --- Ligne du haut : Extract et Transform côte à côte ---
+left to right direction
+
+rectangle "Extract" as EX {
+  component "CTA NIfTI" as CTA
+  component "SEG NIfTI\n(masque annoté)" as SEG
+  component "Validation" as VAL
+}
+
+rectangle "Transform" as TR {
+  component "Resize 3D" as RS
+  component "Normalisation" as NM
+  component "Préparation labels" as LB
+  component "Contrôle qualité" as QC
+  component "Traçabilité" as TC
+}
+
+' --- Bloc Load en dessous ---
+rectangle "Load" as LD {
+  component "BinaryPatients" as BIN
+  component "Logs ETL" as LOG
+  database "MongoDB" as MDB
+}
+
+' --- Forcer Load en dessous des deux autres ---
+TR -[hidden]-> LD
+
+' --- Relations principales de bloc à bloc ---
+EX --> TR
+TR --> LD
+
+' --- Relations internes (optionnelles, si tu veux les garder) ---
+CTA --> VAL
+SEG --> VAL
+
+RS --> NM
+RS --> LB
+NM --> QC
+LB --> QC
+QC --> TC
+
+
+BIN --> MDB
+LOG --> MDB
+@enduml

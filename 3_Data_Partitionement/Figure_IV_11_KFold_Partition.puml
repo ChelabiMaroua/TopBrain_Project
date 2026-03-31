@@ -1,0 +1,21 @@
+@startuml
+title : Schéma du partitionnement K-Fold k=5
+left to right direction
+
+rectangle "20 patients (K-Fold pool)" as POOL
+
+rectangle "Fold 1\ntrain=16 / val=4\nval: 007, 006, 012, 017" as F1
+rectangle "Fold 2\ntrain=16 / val=4\nval: 024, 013, 020, 002" as F2
+rectangle "Fold 3\ntrain=16 / val=4\nval: 016, 025, 015, 003" as F3
+rectangle "Fold 4\ntrain=16 / val=4\nval: 026, 005, 027, 008" as F4
+rectangle "Fold 5\ntrain=16 / val=4\nval: 010, 001, 004, 023" as F5
+
+
+POOL --> F1
+POOL --> F2
+POOL --> F3
+POOL --> F4
+POOL --> F5
+
+
+@enduml

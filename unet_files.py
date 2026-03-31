@@ -1,763 +1,693 @@
 """
-unet_files.py — Pipeline 1: Direct NIfTI File Access
-=====================================================
-Loads image/label pairs directly from the filesystem (no database required).
-This is the simplest pipeline and serves as the baseline for benchmarking.
+inference.py — Inférence UNet3D + Entraînement K-Fold
+======================================================
+Deux modes :
+  1. TRAIN  : entraînement K-Fold (k=5) sur 22 patients, évaluation sur 5 patients test
+  2. INFER  : prend une image NIfTI, retourne un masque de segmentation coloré
 
-Nouveautés v3
--------------
-- Data augmentation via MONAI (standard imagerie médicale) :
-    flip 3 axes, rotation 90°, affine, bruit gaussien, lissage gaussien,
-    variation d'intensité, déformation élastique.
-  Fallback automatique vers l'implémentation manuelle si MONAI non installé.
-- Split 27 patients : train / validation / test (configurable).
-- Métriques calculées par moyenne de slices axiales (pas par slice individuelle).
-- Score combiné = moyenne(Dice_fg, IoU_fg).
+Corrections v4
+--------------
+  - DiceCELoss (MONAI) remplace CrossEntropyLoss         → résout le Dice=0.0000
+  - Calcul automatique des poids de classes              → gère le déséquilibre
+  - base_channels=32 par défaut                          → modèle plus expressif
+  - epochs=150 recommandé                                → convergence complète
+  - early stopping si pas d'amélioration après N epochs  → évite surapprentissage
 
-Installation MONAI
-------------------
-pip install monai
+Stratégie K-Fold
+-----------------
+  27 patients
+  ├── 5  patients → test final (hold-out, séparés AVANT tout)
+  └── 22 patients → K-Fold cross-validation (k=5)
+       Fold 1 : train=18, val=4
+       ...
 
 Usage
 -----
-python unet_files.py --image-dir /path/to/images --label-dir /path/to/labels \
-    --target-size 128 128 64 --epochs 5 --augment \
-    --train-ratio 0.70 --val-ratio 0.15
+# Entraînement recommandé :
+python inference.py train --epochs 150 --augment
+
+# Inférence sur un patient :
+python inference.py infer --input path/to/patient.nii.gz --output results/
 """
 
 import argparse
+import json
 import os
 import random
 import time
+from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 import nibabel as nib
 import numpy as np
 import torch
 import torch.nn as nn
-from dotenv import load_dotenv
-from torch.utils.data import DataLoader, Dataset
+from torch.utils.data import DataLoader
 
-load_dotenv()
+import unet_files
 
-# ---------------------------------------------------------------------------
-# Default paths (loaded from .env)
-# ---------------------------------------------------------------------------
-DEFAULT_IMAGE_DIR = os.getenv("TOPBRAIN_IMAGE_DIR", "")
-DEFAULT_LABEL_DIR = os.getenv("TOPBRAIN_LABEL_DIR", "")
-
-NUM_CLASSES = 6   # classes 0-5
-
+# DiceCELoss MONAI — résout le problème de Dice=0.0000
+try:
+    from monai.losses import DiceCELoss
+    _MONAI_LOSS_AVAILABLE = True
+except ImportError:
+    _MONAI_LOSS_AVAILABLE = False
+    print("  [warn] monai.losses non disponible — fallback CrossEntropyLoss weighted")
 
 # ---------------------------------------------------------------------------
-# Utility helpers
+# Configuration
 # ---------------------------------------------------------------------------
 
-def normalize_patient_id(patient_id: object) -> object:
-    if patient_id is None:
-        return None
-    text = str(patient_id).strip()
-    return int(text) if text.isdigit() else text
+OUTPUT_DIR   = "results"
+MODELS_DIR   = "models"
+NUM_CLASSES  = unet_files.NUM_CLASSES   # 6
+TARGET_SIZE  = (128, 128, 64)
+K_FOLDS      = 5
+N_TEST_HOLD  = 5
+SEED         = 42
+BASE_CHANNELS      = 32   # 32 recommandé (16 trop léger → Dice=0.0000)
+EARLY_STOPPING_PAT = 20   # arrêt si pas d'amélioration après 20 epochs
 
-
-def parse_patient_id_from_filename(filename: str) -> str:
-    name  = filename.replace(".nii.gz", "").replace(".nii", "")
-    parts = name.split("_")
-    return parts[2] if len(parts) >= 3 else name
-
-
-def resolve_label_path(image_filename: str, label_dir: str) -> Optional[str]:
-    base = image_filename
-    if base.endswith(".nii.gz"):
-        base = base[:-7]
-    elif base.endswith(".nii"):
-        base = base[:-4]
-    base_no_suffix = base.replace("_0000", "")
-    candidates = [
-        f"{base}.nii.gz",         f"{base}.nii",
-        f"{base_no_suffix}.nii.gz", f"{base_no_suffix}.nii",
-        f"{base}_seg.nii.gz",     f"{base}_seg.nii",
-        f"{base}_label.nii.gz",   f"{base}_label.nii",
-        f"{base}_labels.nii.gz",  f"{base}_labels.nii",
-    ]
-    for name in candidates:
-        path = os.path.join(label_dir, name)
-        if os.path.exists(path):
-            return path
-    return None
-
-
-def list_patient_files(image_dir: str, label_dir: str) -> List[Dict[str, str]]:
-    if not os.path.isdir(image_dir):
-        raise FileNotFoundError(f"Image directory not found: {image_dir}")
-    if not os.path.isdir(label_dir):
-        raise FileNotFoundError(f"Label directory not found: {label_dir}")
-    items: List[Dict[str, str]] = []
-    for filename in sorted(os.listdir(image_dir)):
-        if not (filename.endswith(".nii.gz") or filename.endswith(".nii")):
-            continue
-        pid      = parse_patient_id_from_filename(filename)
-        img_path = os.path.join(image_dir, filename)
-        lbl_path = resolve_label_path(filename, label_dir)
-        if not lbl_path:
-            continue
-        items.append({"patient_id": pid, "img_path": img_path, "lbl_path": lbl_path})
-    return sorted(items, key=lambda x: str(x["patient_id"]))
-
-
-def filter_items(
-    items: List[Dict[str, str]], patient_ids: Optional[List[str]]
-) -> List[Dict[str, str]]:
-    if not patient_ids:
-        return items
-    targets = {normalize_patient_id(pid) for pid in patient_ids}
-    padded  = {str(t).zfill(3) for t in targets}
-    return [
-        item for item in items
-        if normalize_patient_id(item["patient_id"]) in targets
-        or str(normalize_patient_id(item["patient_id"])).zfill(3) in padded
-    ]
+# Couleurs des classes (lues depuis la DB en production)
+CLASS_COLORS = {
+    0: (17,  24,  39),    # background
+    1: (239,  68,  68),   # cerveau global
+    2: ( 34, 197,  94),   # ventricules
+    3: ( 59, 130, 246),   # matière blanche
+    4: (234, 179,   8),   # matière grise
+    5: (168,  85, 247),   # structures profondes
+}
+CLASS_NAMES = {
+    0: "Background",
+    1: "Cerveau (global)",
+    2: "Ventricules",
+    3: "Matière blanche",
+    4: "Matière grise",
+    5: "Structures profondes",
+}
 
 
 # ---------------------------------------------------------------------------
-# Patient split  (train / val / test)
+# K-Fold split
 # ---------------------------------------------------------------------------
 
-def split_patients(
-    items:       List[Dict[str, str]],
-    train_ratio: float = 0.70,
-    val_ratio:   float = 0.15,
-    seed:        int   = 42,
-) -> Tuple[List, List, List]:
+def prepare_kfold_split(
+    items:       List[Dict],
+    n_test_hold: int  = N_TEST_HOLD,
+    k:           int  = K_FOLDS,
+    seed:        int  = SEED,
+) -> Tuple[List[Dict], List[List[Tuple[List, List]]]]:
     """
-    Split patient list into train / val / test sets.
+    Sépare les patients en :
+      - test_items  : hold-out final (n_test_hold patients)
+      - folds       : liste de k tuples (train_items, val_items)
 
-    With 27 patients and default ratios (0.70 / 0.15 / 0.15):
-      train = 18-19 patients, val = 4 patients, test = 4 patients
-    The split is deterministic given the same seed.
+    Retourne (test_items, folds).
+
+    Avec 27 patients, k=5, n_test_hold=5 :
+      - 5  patients → test final
+      - 22 patients → 5 folds de (train=~18, val=~4)
     """
-    if train_ratio + val_ratio > 1.0:
-        raise ValueError("train_ratio + val_ratio must be <= 1.0")
     rng = random.Random(seed)
     shuffled = items[:]
     rng.shuffle(shuffled)
-    n     = len(shuffled)
-    n_tr  = int(round(n * train_ratio))
-    n_val = int(round(n * val_ratio))
-    train_items = shuffled[:n_tr]
-    val_items   = shuffled[n_tr : n_tr + n_val]
-    test_items  = shuffled[n_tr + n_val :]
-    print(f"  [split] total={n}  train={len(train_items)}  "
-          f"val={len(val_items)}  test={len(test_items)}  (seed={seed})")
-    return train_items, val_items, test_items
+
+    test_items   = shuffled[:n_test_hold]
+    kfold_items  = shuffled[n_test_hold:]
+
+    n = len(kfold_items)
+    fold_size = n // k
+    folds = []
+
+    for i in range(k):
+        val_start = i * fold_size
+        val_end   = val_start + fold_size if i < k - 1 else n
+        val_items   = kfold_items[val_start:val_end]
+        train_items = kfold_items[:val_start] + kfold_items[val_end:]
+        folds.append((train_items, val_items))
+
+    print(f"\n  [split] Total patients : {len(items)}")
+    print(f"          Hold-out test  : {len(test_items)} patients")
+    print(f"          K-Fold pool    : {len(kfold_items)} patients")
+    for i, (tr, vl) in enumerate(folds):
+        pids_val = [it['patient_id'] for it in vl]
+        print(f"          Fold {i+1}         : train={len(tr)}  val={len(vl)}  "
+              f"(val patients: {pids_val})")
+    print(f"          Test patients  : {[it['patient_id'] for it in test_items]}\n")
+
+    return test_items, folds
 
 
 # ---------------------------------------------------------------------------
-# Volume preprocessing
+# Metrics
 # ---------------------------------------------------------------------------
 
-def resize_volume(
-    volume:      np.ndarray,
-    target_size: Tuple[int, int, int],
-    is_label:    bool = False,
-) -> np.ndarray:
-    from scipy.ndimage import zoom
-    zoom_factors = [target_size[i] / volume.shape[i] for i in range(3)]
-    order = 0 if is_label else 1
-    return zoom(volume, zoom_factors, order=order)
-
-
-def normalize_volume(volume: np.ndarray) -> np.ndarray:
-    vmin, vmax = volume.min(), volume.max()
-    if vmax - vmin > 0:
-        return (volume - vmin) / (vmax - vmin)
-    return volume
-
-
-# ---------------------------------------------------------------------------
-# Data Augmentation  — MONAI (avec fallback manuel si non installé)
-# ---------------------------------------------------------------------------
-
-# Tentative d'import MONAI (compatible selon versions)
-try:
-    from monai.transforms import (
-        Compose,
-        RandFlipd,
-        RandRotate90d,
-        RandAffined,
-        RandGaussianNoised,
-        RandGaussianSmoothd,
-        RandScaleIntensityd,
-        RandShiftIntensityd,
-        RandZoomd,
-    )
-    _MONAI_AVAILABLE = True
-
-    try:
-        from monai.transforms import Rand3DElasticd
-        _MONAI_ELASTIC_TRANSFORM = Rand3DElasticd
-        _MONAI_ELASTIC_AVAILABLE = True
-        print("  [augmentation] MONAI détecté — augmentation avancée activée (Rand3DElasticd).")
-    except ImportError:
-        _MONAI_ELASTIC_TRANSFORM = None
-        _MONAI_ELASTIC_AVAILABLE = False
-        print("  [augmentation] MONAI détecté — augmentation activée (sans déformation élastique).")
-except ImportError:
-    _MONAI_AVAILABLE = False
-    _MONAI_ELASTIC_AVAILABLE = False
-    _MONAI_ELASTIC_TRANSFORM = None
-    print("  [augmentation] MONAI non installé — fallback vers augmentation manuelle.")
-    print("                 Pour installer : pip install monai")
-
-
-def _build_monai_transforms() -> object:
-    """
-    Construit le pipeline d'augmentation MONAI pour imagerie médicale 3D.
-
-    Transformations appliquées (toutes aléatoires) :
-    ┌─────────────────────────────────────────────────────────────────┐
-    │  RandFlipd          p=0.5  axes 0, 1, 2 (sagittal/coronal/ax.) │
-    │  RandRotate90d      p=0.5  rotation 90° aléatoire              │
-    │  RandAffined        p=0.3  rotation ±15°, translation ±10px    │
-    │  RandZoomd          p=0.3  zoom 0.9–1.1                        │
-    │  RandGaussianNoised p=0.5  σ=0.05  (image uniquement)         │
-    │  RandGaussianSmoothd p=0.3 σ=0.5–1.0 (lissage léger)          │
-    │  RandScaleIntensityd p=0.5 facteur ±10% (contraste CT)        │
-    │  RandShiftIntensityd p=0.5 décalage ±10% (luminosité CT)      │
-    │  RandElasticDeformD  p=0.2 déformation élastique               │
-    └─────────────────────────────────────────────────────────────────┘
-    Note : toutes les transformations spatiales s'appliquent à image ET
-    label de façon synchronisée. Les transformations d'intensité
-    s'appliquent uniquement à l'image (préserve les labels).
-    """
-    transforms = [
-        # ── Transformations spatiales (image + label) ──
-        RandFlipd(keys=["image", "label"], prob=0.5, spatial_axis=0),
-        RandFlipd(keys=["image", "label"], prob=0.5, spatial_axis=1),
-        RandFlipd(keys=["image", "label"], prob=0.5, spatial_axis=2),
-        RandRotate90d(keys=["image", "label"], prob=0.5, max_k=3, spatial_axes=(0, 1)),
-        RandAffined(
-            keys=["image", "label"],
-            prob=0.3,
-            rotate_range=(0.26, 0.26, 0.26),   # ±15 degrés
-            translate_range=(10, 10, 5),
-            scale_range=(0.1, 0.1, 0.1),
-            mode=("bilinear", "nearest"),       # bilinear image, nearest label
-            padding_mode="zeros",
-        ),
-        RandZoomd(
-            keys=["image", "label"],
-            prob=0.3,
-            min_zoom=0.9, max_zoom=1.1,
-            mode=("trilinear", "nearest"),
-            keep_size=True,
-        ),
-        # ── Transformations d'intensité (image uniquement) ──
-        RandGaussianNoised(keys=["image"], prob=0.5, std=0.05),
-        RandGaussianSmoothd(
-            keys=["image"], prob=0.3,
-            sigma_x=(0.5, 1.0), sigma_y=(0.5, 1.0), sigma_z=(0.5, 1.0),
-        ),
-        RandScaleIntensityd(keys=["image"], factors=0.1, prob=0.5),
-        RandShiftIntensityd(keys=["image"], offsets=0.1, prob=0.5),
-    ]
-
-    if _MONAI_ELASTIC_AVAILABLE and _MONAI_ELASTIC_TRANSFORM is not None:
-        transforms.append(
-            _MONAI_ELASTIC_TRANSFORM(
-                keys=["image", "label"],
-                prob=0.2,
-                sigma_range=(5, 8),
-                magnitude_range=(100, 200),
-                mode=("bilinear", "nearest"),
-                padding_mode="zeros",
-            )
-        )
-
-    return Compose(transforms)
-
-
-# Instance globale du pipeline MONAI (créée une seule fois)
-_monai_transforms = _build_monai_transforms() if _MONAI_AVAILABLE else None
-
-
-def augment_volume(
-    img: np.ndarray,
-    lbl: np.ndarray,
-    rng: np.random.Generator,
-) -> Tuple[np.ndarray, np.ndarray]:
-    """
-    Applique l'augmentation 3D sur une paire image/label.
-
-    Si MONAI est installé  → pipeline MONAI complet (8 transformations).
-    Sinon                  → fallback manuel (flip, rotation, bruit, zoom).
-
-    Paramètres
-    ----------
-    img : np.ndarray (H, W, D) float32 — image normalisée [0, 1]
-    lbl : np.ndarray (H, W, D) float32 — labels (passés en float pour compat)
-    rng : np.random.Generator — non utilisé par MONAI mais gardé pour fallback
-
-    Retourne
-    --------
-    (img_aug, lbl_aug) — même shape, lbl en float32 (converti en int64 par le Dataset)
-    """
-    if _MONAI_AVAILABLE:
-        # MONAI attend des tenseurs (C, H, W, D) — on ajoute le channel dim
-        sample = {
-            "image": torch.from_numpy(img).float().unsqueeze(0),   # (1, H, W, D)
-            "label": torch.from_numpy(lbl).float().unsqueeze(0),   # (1, H, W, D)
-        }
-        out    = _monai_transforms(sample)
-        img_out = out["image"].squeeze(0).numpy()   # (H, W, D)
-        lbl_out = out["label"].squeeze(0).numpy()   # (H, W, D)
-        # Clip image et arrondi labels
-        img_out = np.clip(img_out, 0.0, 1.0)
-        lbl_out = np.clip(np.round(lbl_out), 0, NUM_CLASSES - 1)
-        return img_out.astype(np.float32), lbl_out.astype(np.float32)
-
-    # ── Fallback manuel (si MONAI non disponible) ──
-    for axis in (0, 1):
-        if rng.random() < 0.5:
-            img = np.flip(img, axis=axis).copy()
-            lbl = np.flip(lbl, axis=axis).copy()
-    if rng.random() < 0.5:
-        k = int(rng.integers(1, 4))
-        img = np.rot90(img, k=k, axes=(0, 1)).copy()
-        lbl = np.rot90(lbl, k=k, axes=(0, 1)).copy()
-    if rng.random() < 0.5:
-        sigma = rng.uniform(0.01, 0.05)
-        img   = img + rng.normal(0, sigma, img.shape).astype(np.float32)
-        img   = np.clip(img, 0.0, 1.0)
-    if rng.random() < 0.3:
-        factor     = rng.uniform(0.9, 1.0)
-        orig_shape = img.shape
-        new_shape  = tuple(max(1, int(s * factor)) for s in orig_shape)
-        starts     = [(o - n) // 2 for o, n in zip(orig_shape, new_shape)]
-        img_crop   = img[starts[0]:starts[0]+new_shape[0],
-                         starts[1]:starts[1]+new_shape[1],
-                         starts[2]:starts[2]+new_shape[2]]
-        lbl_crop   = lbl[starts[0]:starts[0]+new_shape[0],
-                         starts[1]:starts[1]+new_shape[1],
-                         starts[2]:starts[2]+new_shape[2]]
-        img = resize_volume(img_crop, orig_shape, is_label=False)
-        lbl = resize_volume(lbl_crop, orig_shape, is_label=True)
-    return img, lbl
-
-
-# ---------------------------------------------------------------------------
-# Dataset
-# ---------------------------------------------------------------------------
-
-class FileNiftiDataset(Dataset):
-    """
-    PyTorch Dataset that loads NIfTI image/label pairs directly from disk.
-    Supports optional data augmentation (training mode).
-    """
-
-    def __init__(
-        self,
-        items:       List[Dict[str, str]],
-        target_size: Optional[Tuple[int, int, int]] = None,
-        normalize:   bool  = True,
-        augment:     bool  = False,
-        seed:        int   = 42,
-    ) -> None:
-        self.items       = items
-        self.target_size = target_size
-        self.normalize   = normalize
-        self.augment     = augment
-        # Per-dataset RNG so augmentation is reproducible
-        self._rng = np.random.default_rng(seed)
-
-    def __len__(self) -> int:
-        return len(self.items)
-
-    def __getitem__(self, idx: int):
-        t_start = time.perf_counter()
-        item    = self.items[idx]
-
-        img = nib.load(item["img_path"]).get_fdata().astype(np.float32)
-        lbl = nib.load(item["lbl_path"]).get_fdata().astype(np.int64)
-        lbl = np.clip(lbl, 0, NUM_CLASSES - 1)
-
-        if self.target_size:
-            img = resize_volume(img, self.target_size, is_label=False)
-            lbl = resize_volume(lbl, self.target_size, is_label=True)
-
-        if self.normalize:
-            img = normalize_volume(img)
-
-        # Augmentation applied AFTER resize+normalize
-        if self.augment:
-            img, lbl = augment_volume(img, lbl.astype(np.float32), self._rng)
-            lbl = lbl.astype(np.int64)
-
-        prep_time = time.perf_counter() - t_start
-
-        img_tensor = torch.from_numpy(img).float().unsqueeze(0)
-        lbl_tensor = torch.from_numpy(lbl).long()
-        return img_tensor, lbl_tensor, prep_time
-
-
-# ---------------------------------------------------------------------------
-# Slice-averaged Dice & IoU
-# ---------------------------------------------------------------------------
-
-def compute_slice_averaged_metrics(
+def compute_metrics(
     preds:       torch.Tensor,
     targets:     torch.Tensor,
     num_classes: int   = NUM_CLASSES,
     smooth:      float = 1e-6,
 ) -> Dict[str, float]:
-    """
-    Compute Dice and IoU averaged over axial slices, then averaged over classes.
-
-    Strategy
-    --------
-    For each axial slice d (along the last spatial dimension):
-      - compute per-class Dice and IoU on that 2-D slice
-      - skip slices where neither pred nor target contains the class
-        (avoids inflating scores with trivially-empty slices)
-    Return the mean across all valid slices and all foreground classes.
-
-    Parameters
-    ----------
-    preds   : (B, C, H, W, D) — raw logits
-    targets : (B, H, W, D)    — integer class labels
-
-    Returns
-    -------
-    dict with keys:
-      dice_class_1 .. dice_class_5   (foreground)
-      iou_class_1  .. iou_class_5
-      mean_dice_fg, mean_iou_fg
-      combined_score  = (mean_dice_fg + mean_iou_fg) / 2
-    """
-    pred_classes = preds.argmax(dim=1)   # (B, H, W, D)
-    depth        = preds.shape[-1]       # D
-
-    # Accumulate per-class slice scores
-    slice_dice: Dict[int, List[float]] = {c: [] for c in range(1, num_classes)}
-    slice_iou:  Dict[int, List[float]] = {c: [] for c in range(1, num_classes)}
-
-    for d in range(depth):
-        pred_slice   = pred_classes[..., d]   # (B, H, W)
-        target_slice = targets[..., d]         # (B, H, W)
-
-        for c in range(1, num_classes):
-            p = (pred_slice   == c).float()
-            t = (target_slice == c).float()
-
-            p_sum = p.sum().item()
-            t_sum = t.sum().item()
-
-            # Skip slice if class absent in both prediction and ground-truth
-            if p_sum == 0 and t_sum == 0:
-                continue
-
-            inter = (p * t).sum().item()
-            dice  = (2 * inter + smooth) / (p_sum + t_sum + smooth)
-            iou   = (inter + smooth)     / (p_sum + t_sum - inter + smooth)
-            slice_dice[c].append(dice)
-            slice_iou[c].append(iou)
-
-    metrics: Dict[str, float] = {}
-    fg_dice_vals, fg_iou_vals = [], []
-
-    for c in range(1, num_classes):
-        d_mean = float(np.mean(slice_dice[c])) if slice_dice[c] else 0.0
-        i_mean = float(np.mean(slice_iou[c]))  if slice_iou[c]  else 0.0
-        metrics[f"dice_class_{c}"] = d_mean
-        metrics[f"iou_class_{c}"]  = i_mean
-        fg_dice_vals.append(d_mean)
-        fg_iou_vals.append(i_mean)
-
-    metrics["mean_dice_fg"]    = float(np.mean(fg_dice_vals)) if fg_dice_vals else 0.0
-    metrics["mean_iou_fg"]     = float(np.mean(fg_iou_vals))  if fg_iou_vals  else 0.0
-    metrics["combined_score"]  = (metrics["mean_dice_fg"] + metrics["mean_iou_fg"]) / 2.0
-    return metrics
+    """Slice-averaged Dice + IoU + combined score."""
+    return unet_files.compute_slice_averaged_metrics(preds, targets, num_classes, smooth)
 
 
-def evaluate_segmentation(
-    model:       nn.Module,
-    loader:      DataLoader,
+def evaluate_loader(
+    model:  nn.Module,
+    loader: DataLoader,
+    device: torch.device,
+) -> Dict[str, float]:
+    return unet_files.evaluate_segmentation(model, loader, device)
+
+
+# ---------------------------------------------------------------------------
+# Poids des classes — résout le déséquilibre background vs foreground
+# ---------------------------------------------------------------------------
+
+def compute_class_weights(
+    train_items: List[Dict],
     device:      torch.device,
     num_classes: int = NUM_CLASSES,
-) -> Dict[str, float]:
+) -> torch.Tensor:
     """
-    Full evaluation pass on a DataLoader.
-    Returns slice-averaged Dice, IoU, and combined score per class.
+    Calcule les poids inversement proportionnels à la fréquence de chaque classe.
+    Le background (classe 0) reçoit un poids réduit pour forcer le modèle
+    à apprendre les structures foreground.
+
+    Formule : weight_c = total_voxels / (num_classes × count_c)
+    Puis     : weight_0 *= 0.1   (pénalise moins le background)
+
+    Retourne un tenseur (num_classes,) sur device.
     """
-    model.eval()
-    batch_metrics: List[Dict[str, float]] = []
+    print("  [weights] Calcul des poids de classes sur le train set...")
+    counts = np.zeros(num_classes, dtype=np.float64)
 
-    with torch.no_grad():
-        for batch in loader:
-            imgs, lbls = batch[0].to(device), batch[1].to(device)
-            m = compute_slice_averaged_metrics(model(imgs), lbls, num_classes)
-            batch_metrics.append(m)
+    for item in train_items:
+        try:
+            lbl = nib.load(item["lbl_path"]).get_fdata().astype(np.int64)
+            lbl = np.clip(lbl, 0, num_classes - 1)
+            for c in range(num_classes):
+                counts[c] += (lbl == c).sum()
+        except Exception:
+            continue
 
-    if not batch_metrics:
-        return {}
+    counts = np.maximum(counts, 1)   # évite division par zéro
+    total  = counts.sum()
+    weights = total / (num_classes * counts)
 
-    # Average over all batches
-    aggregated: Dict[str, float] = {}
-    for key in batch_metrics[0]:
-        aggregated[key] = float(np.mean([bm[key] for bm in batch_metrics]))
-    return aggregated
+    # Réduit le poids du background — force l'apprentissage du foreground
+    weights[0] *= 0.1
 
+    # Normalise pour que la moyenne = 1
+    weights = weights / weights.mean()
 
-# ---------------------------------------------------------------------------
-# Model
-# ---------------------------------------------------------------------------
+    print(f"  [weights] Poids par classe :")
+    class_names = ["Background", "Classe 1", "Classe 2",
+                   "Classe 3",   "Classe 4", "Classe 5"]
+    for c in range(num_classes):
+        pct = counts[c] / total * 100
+        print(f"            {class_names[c]:<15} : "
+              f"{counts[c]:>10.0f} voxels ({pct:5.1f}%)  "
+              f"→ weight={weights[c]:.3f}")
 
-class DoubleConv3D(nn.Module):
-    def __init__(self, in_channels: int, out_channels: int) -> None:
-        super().__init__()
-        self.block = nn.Sequential(
-            nn.Conv3d(in_channels, out_channels, kernel_size=3, padding=1, bias=False),
-            nn.BatchNorm3d(out_channels),
-            nn.ReLU(inplace=True),
-            nn.Conv3d(out_channels, out_channels, kernel_size=3, padding=1, bias=False),
-            nn.BatchNorm3d(out_channels),
-            nn.ReLU(inplace=True),
-        )
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return self.block(x)
+    return torch.tensor(weights, dtype=torch.float32, device=device)
 
 
-class UNet3D(nn.Module):
-    def __init__(
-        self,
-        in_channels:  int = 1,
-        out_channels: int = NUM_CLASSES,
-        base_channels: int = 16,
-    ) -> None:
-        super().__init__()
-        bc = base_channels
-        self.enc1      = DoubleConv3D(in_channels, bc)
-        self.pool1     = nn.MaxPool3d(2)
-        self.enc2      = DoubleConv3D(bc, bc * 2)
-        self.pool2     = nn.MaxPool3d(2)
-        self.enc3      = DoubleConv3D(bc * 2, bc * 4)
-        self.pool3     = nn.MaxPool3d(2)
-        self.bottleneck= DoubleConv3D(bc * 4, bc * 8)
-        self.up3       = nn.ConvTranspose3d(bc * 8, bc * 4, kernel_size=2, stride=2)
-        self.dec3      = DoubleConv3D(bc * 8, bc * 4)
-        self.up2       = nn.ConvTranspose3d(bc * 4, bc * 2, kernel_size=2, stride=2)
-        self.dec2      = DoubleConv3D(bc * 4, bc * 2)
-        self.up1       = nn.ConvTranspose3d(bc * 2, bc, kernel_size=2, stride=2)
-        self.dec1      = DoubleConv3D(bc * 2, bc)
-        self.final     = nn.Conv3d(bc, out_channels, kernel_size=1)
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        e1 = self.enc1(x)
-        e2 = self.enc2(self.pool1(e1))
-        e3 = self.enc3(self.pool2(e2))
-        bn = self.bottleneck(self.pool3(e3))
-        d3 = self.dec3(torch.cat([self.up3(bn), e3], dim=1))
-        d2 = self.dec2(torch.cat([self.up2(d3), e2], dim=1))
-        d1 = self.dec1(torch.cat([self.up1(d2), e1], dim=1))
-        return self.final(d1)
-
-
-def build_model(base_channels: int = 16) -> nn.Module:
-    return UNet3D(in_channels=1, out_channels=NUM_CLASSES, base_channels=base_channels)
-
-
-# ---------------------------------------------------------------------------
-# DataLoaders  (updated to support 3-way split + augmentation)
-# ---------------------------------------------------------------------------
-
-def create_dataloaders(
-    items:       List[Dict[str, str]],
-    batch_size:  int,
-    num_workers: int,
-    train_split: float,               # kept for benchmark back-compat
-    target_size: Optional[Tuple[int, int, int]],
-    normalize:   bool,
-    seed:        int,
-    augment:     bool = False,        # enable data augmentation on train set
-    train_ratio: float = 0.70,
-    val_ratio:   float = 0.15,
-    use_three_way_split: bool = False,
-) -> Tuple[DataLoader, Optional[DataLoader], Optional[DataLoader]]:
+def build_criterion(
+    train_items: List[Dict],
+    device:      torch.device,
+) -> nn.Module:
     """
-    Build DataLoaders.
-    - If use_three_way_split=True  ->  train / val / test  (3 loaders)
-    - Otherwise (benchmark compat) ->  train / val  (2 loaders, test=None)
-    """
-    if not items:
-        raise ValueError("No patient files found — cannot build DataLoaders.")
+    Construit la fonction de perte optimale.
 
-    if use_three_way_split:
-        train_items, val_items, test_items = split_patients(
-            items, train_ratio=train_ratio, val_ratio=val_ratio, seed=seed
+    Si MONAI disponible → DiceCELoss (50% Dice + 50% CrossEntropy pondérée)
+                          C'est la combinaison standard en segmentation médicale.
+                          Le Dice loss force directement l'optimisation du score Dice.
+                          Le CrossEntropy pondéré gère le déséquilibre des classes.
+
+    Sinon              → CrossEntropyLoss avec poids de classes (fallback)
+    """
+    weights = compute_class_weights(train_items, device)
+
+    if _MONAI_LOSS_AVAILABLE:
+        print("  [loss] DiceCELoss MONAI (Dice 50% + CrossEntropy 50% pondérée)")
+        return DiceCELoss(
+            to_onehot_y=True,      # convertit labels entiers → one-hot
+            softmax=True,          # applique softmax aux logits du modèle
+            lambda_dice=0.5,       # 50% contribution Dice loss
+            lambda_ce=0.5,         # 50% contribution CrossEntropy loss
+            weight=weights,        # poids par classe pour le CE
         )
     else:
-        if train_split >= 1.0:
-            train_items, val_items, test_items = items[:], [], []
+        print("  [loss] CrossEntropyLoss pondérée (fallback)")
+        return nn.CrossEntropyLoss(weight=weights)
+
+
+# ---------------------------------------------------------------------------
+# Training — one fold
+# ---------------------------------------------------------------------------
+
+def train_one_fold(
+    fold_idx:    int,
+    train_items: List[Dict],
+    val_items:   List[Dict],
+    device:      torch.device,
+    epochs:      int  = 50,
+    augment:     bool = True,
+    lr:          float = 1e-4,
+    batch_size:  int  = 1,
+) -> Tuple[nn.Module, Dict]:
+    """
+    Entraîne un modèle UNet3D sur un fold et retourne
+    (best_model, history_dict).
+    """
+    print(f"\n{'='*60}")
+    print(f"  FOLD {fold_idx+1}/{K_FOLDS}  —  "
+          f"train={len(train_items)} patients  val={len(val_items)} patients")
+    print(f"{'='*60}")
+
+    # Dataloaders
+    train_loader, _, _ = unet_files.create_dataloaders(
+        items=train_items,
+        batch_size=batch_size, num_workers=0,
+        train_split=1.0, target_size=TARGET_SIZE,
+        normalize=True, seed=SEED + fold_idx,
+        augment=augment, use_three_way_split=False,
+    )
+    val_loader, _, _ = unet_files.create_dataloaders(
+        items=val_items,
+        batch_size=batch_size, num_workers=0,
+        train_split=1.0, target_size=TARGET_SIZE,
+        normalize=True, seed=SEED, augment=False,
+        use_three_way_split=False,
+    )
+
+    # ── Correction 1 : base_channels=32 (modèle plus expressif) ──
+    model     = unet_files.build_model(base_channels=BASE_CHANNELS).to(device)
+    # ── Correction 2 : DiceCELoss + poids de classes ──
+    criterion = build_criterion(train_items, device)
+    optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs)
+
+    history = {
+        "train_loss": [], "val_loss": [],
+        "val_dice": [], "val_iou": [], "val_combined": []
+    }
+
+    best_combined    = -1.0
+    best_weights     = None
+    no_improve_count = 0   # compteur early stopping
+
+    for epoch in range(1, epochs + 1):
+        # ── Train ──
+        t0         = time.perf_counter()
+        train_loss = unet_files.run_epoch(model, train_loader, optimizer, criterion, device)
+        scheduler.step()
+
+        # ── Val ──
+        val_loss = unet_files.evaluate(model, val_loader, criterion, device)
+        seg      = evaluate_loader(model, val_loader, device)
+
+        dice     = seg.get("mean_dice_fg", 0.0)
+        iou      = seg.get("mean_iou_fg",  0.0)
+        combined = seg.get("combined_score", 0.0)
+
+        history["train_loss"].append(round(train_loss, 4))
+        history["val_loss"].append(round(val_loss, 4))
+        history["val_dice"].append(round(dice, 4))
+        history["val_iou"].append(round(iou, 4))
+        history["val_combined"].append(round(combined, 4))
+
+        elapsed = time.perf_counter() - t0
+        print(f"  Epoch {epoch:>3}/{epochs}  "
+              f"train={train_loss:.4f}  val={val_loss:.4f}  "
+              f"Dice={dice:.4f}  IoU={iou:.4f}  "
+              f"Combined={combined:.4f}  ({elapsed:.1f}s)")
+
+        # ── Correction 3 : Early stopping ──
+        if combined > best_combined:
+            best_combined    = combined
+            best_weights     = {k: v.clone() for k, v in model.state_dict().items()}
+            no_improve_count = 0
+            print(f"    ✅ Nouveau meilleur combined={combined:.4f}")
         else:
-            rng = random.Random(seed)
-            shuffled = items[:]
-            rng.shuffle(shuffled)
-            split_idx   = int(len(shuffled) * train_split)
-            train_items = shuffled[:split_idx]
-            val_items   = shuffled[split_idx:]
-            test_items  = []
+            no_improve_count += 1
+            if no_improve_count >= EARLY_STOPPING_PAT:
+                print(f"    ⏹  Early stopping — pas d'amélioration depuis "
+                      f"{EARLY_STOPPING_PAT} epochs (epoch {epoch}/{epochs})")
+                break
 
-    def _make_loader(item_list, is_train: bool) -> Optional[DataLoader]:
-        if not item_list:
-            return None
-        ds = FileNiftiDataset(
-            item_list,
-            target_size=target_size,
-            normalize=normalize,
-            augment=(augment and is_train),
-            seed=seed,
-        )
-        return DataLoader(
-            ds,
-            batch_size=batch_size,
-            shuffle=is_train,
-            num_workers=num_workers,
-            pin_memory=torch.cuda.is_available(),
-        )
+    # Recharge les meilleurs poids
+    if best_weights:
+        model.load_state_dict(best_weights)
 
-    train_loader = _make_loader(train_items, is_train=True)
-    val_loader   = _make_loader(val_items,   is_train=False)
-    test_loader  = _make_loader(test_items,  is_train=False)
-
-    return train_loader, val_loader, test_loader
+    history["best_combined"] = best_combined
+    return model, history
 
 
 # ---------------------------------------------------------------------------
-# Training / evaluation helpers
+# K-Fold training — full
 # ---------------------------------------------------------------------------
 
-def run_epoch(
-    model:     nn.Module,
-    loader:    DataLoader,
-    optimizer: torch.optim.Optimizer,
-    criterion: nn.Module,
-    device:    torch.device,
-) -> float:
-    model.train()
-    total_loss = 0.0
-    for images, labels, _prep_time in loader:
-        images = images.to(device, non_blocking=True)
-        labels = labels.to(device, non_blocking=True)
-        optimizer.zero_grad()
-        loss = criterion(model(images), labels)
-        loss.backward()
-        optimizer.step()
-        total_loss += loss.item()
-    return total_loss / max(1, len(loader))
+def train_kfold(
+    image_dir: str,
+    label_dir: str,
+    epochs:    int  = 50,
+    augment:   bool = True,
+    device:    Optional[torch.device] = None,
+) -> None:
+    if device is None:
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    print(f"\n  Device : {device}")
+    print(f"  Augmentation : {'OUI' if augment else 'NON'}")
+    print(f"  K-Folds : {K_FOLDS}  |  Epochs/fold : {epochs}")
+
+    # Charge tous les patients
+    all_items   = unet_files.list_patient_files(image_dir, label_dir)
+    test_items, folds = prepare_kfold_split(all_items)
+
+    os.makedirs(MODELS_DIR, exist_ok=True)
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
+
+    fold_models   = []
+    fold_histories = []
+
+    # ── Entraînement de chaque fold ──
+    for fold_idx, (train_items, val_items) in enumerate(folds):
+        model, history = train_one_fold(
+            fold_idx=fold_idx,
+            train_items=train_items,
+            val_items=val_items,
+            device=device,
+            epochs=epochs,
+            augment=augment,
+        )
+
+        # Sauvegarde du modèle du fold
+        model_path = os.path.join(MODELS_DIR, f"unet3d_fold{fold_idx+1}.pth")
+        torch.save(model.state_dict(), model_path)
+        print(f"\n  [saved] Modèle fold {fold_idx+1} → {model_path}")
+
+        fold_models.append(model)
+        fold_histories.append(history)
+
+    # ── Résumé K-Fold ──
+    print(f"\n{'='*60}")
+    print(f"  RÉSUMÉ K-FOLD")
+    print(f"{'='*60}")
+    for i, h in enumerate(fold_histories):
+        print(f"  Fold {i+1} — Best combined: {h['best_combined']:.4f}")
+    mean_combined = np.mean([h["best_combined"] for h in fold_histories])
+    std_combined  = np.std( [h["best_combined"] for h in fold_histories])
+    print(f"\n  Mean combined : {mean_combined:.4f} ± {std_combined:.4f}")
+
+    # ── Évaluation finale sur le test hold-out ──
+    print(f"\n{'='*60}")
+    print(f"  ÉVALUATION FINALE — TEST HOLD-OUT ({len(test_items)} patients)")
+    print(f"{'='*60}")
+
+    test_loader, _, _ = unet_files.create_dataloaders(
+        items=test_items,
+        batch_size=1, num_workers=0,
+        train_split=1.0, target_size=TARGET_SIZE,
+        normalize=True, seed=SEED, augment=False,
+        use_three_way_split=False,
+    )
+
+    # Ensemble : moyenne des prédictions des 5 folds
+    all_test_metrics = []
+    for model in fold_models:
+        m = evaluate_loader(model, test_loader, device)
+        all_test_metrics.append(m)
+
+    # Moyenne sur les folds
+    final_metrics = {}
+    for key in all_test_metrics[0]:
+        final_metrics[key] = float(np.mean([m[key] for m in all_test_metrics]))
+
+    print(f"  Mean Dice (fg)   : {final_metrics['mean_dice_fg']:.4f}")
+    print(f"  Mean IoU  (fg)   : {final_metrics['mean_iou_fg']:.4f}")
+    print(f"  Combined score   : {final_metrics['combined_score']:.4f}")
+    for c in range(1, NUM_CLASSES):
+        print(f"    Classe {c} ({CLASS_NAMES[c]:<25})"
+              f" — Dice={final_metrics[f'dice_class_{c}']:.4f}"
+              f"  IoU={final_metrics[f'iou_class_{c}']:.4f}")
+
+    # Export JSON des résultats
+    results = {
+        "k_folds": K_FOLDS,
+        "epochs":  epochs,
+        "augment": augment,
+        "device":  str(device),
+        "test_patients": [it["patient_id"] for it in test_items],
+        "fold_histories": fold_histories,
+        "kfold_summary": {
+            "mean_combined": round(mean_combined, 4),
+            "std_combined":  round(std_combined,  4),
+        },
+        "test_final": {k: round(v, 4) for k, v in final_metrics.items()},
+    }
+    results_path = os.path.join(OUTPUT_DIR, "kfold_results.json")
+    with open(results_path, "w", encoding="utf-8") as f:
+        json.dump(results, f, indent=2, ensure_ascii=False)
+    print(f"\n  [saved] Résultats → {results_path}")
+
+    # Sauvegarde du modèle final (fold avec meilleur combined)
+    best_fold_idx = int(np.argmax([h["best_combined"] for h in fold_histories]))
+    best_model    = fold_models[best_fold_idx]
+    best_path     = os.path.join(MODELS_DIR, "unet3d_best.pth")
+    torch.save(best_model.state_dict(), best_path)
+    print(f"  [saved] Meilleur modèle (fold {best_fold_idx+1}) → {best_path}")
 
 
-def evaluate(
-    model:     nn.Module,
-    loader:    DataLoader,
-    criterion: nn.Module,
-    device:    torch.device,
-) -> float:
+# ---------------------------------------------------------------------------
+# Inférence
+# ---------------------------------------------------------------------------
+
+def load_model(
+    model_path: str,
+    device:     torch.device,
+) -> nn.Module:
+    model = unet_files.build_model(base_channels=BASE_CHANNELS)
+    model.load_state_dict(torch.load(model_path, map_location=device))
+    model.to(device)
     model.eval()
-    total_loss = 0.0
+    return model
+
+
+def infer_volume(
+    input_path:  str,
+    model_path:  str  = None,
+    output_dir:  str  = OUTPUT_DIR,
+    fold:        Optional[int] = None,
+    device:      Optional[torch.device] = None,
+    save_nifti:  bool = True,
+    save_png:    bool = True,
+) -> np.ndarray:
+    """
+    Prend un fichier NIfTI, retourne le masque de segmentation (numpy array).
+    Sauvegarde optionnellement le masque NIfTI + les slices PNG colorées.
+
+    Paramètres
+    ----------
+    input_path  : chemin vers le .nii ou .nii.gz
+    model_path  : chemin vers le .pth (défaut: models/unet3d_best.pth)
+    output_dir  : dossier de sortie
+    fold        : si fourni, utilise le modèle du fold spécifié
+    """
+    if device is None:
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    # Résolution du chemin modèle
+    if model_path is None:
+        if fold is not None:
+            model_path = os.path.join(MODELS_DIR, f"unet3d_fold{fold}.pth")
+        else:
+            model_path = os.path.join(MODELS_DIR, "unet3d_best.pth")
+
+    if not os.path.exists(model_path):
+        raise FileNotFoundError(
+            f"Modèle introuvable : {model_path}\n"
+            f"Lancez d'abord : python inference.py train"
+        )
+
+    print(f"\n  [infer] Fichier  : {input_path}")
+    print(f"          Modèle   : {model_path}")
+    print(f"          Device   : {device}")
+
+    # ── Chargement et preprocessing ──
+    nii    = nib.load(input_path)
+    img    = nii.get_fdata().astype(np.float32)
+    affine = nii.affine
+    orig_shape = img.shape[:3]
+
+    img = unet_files.resize_volume(img, TARGET_SIZE, is_label=False)
+    img = unet_files.normalize_volume(img)
+
+    tensor = torch.from_numpy(img).float().unsqueeze(0).unsqueeze(0).to(device)
+
+    # ── Inférence ──
+    model = load_model(model_path, device)
     with torch.no_grad():
-        for images, labels, _prep_time in loader:
-            images = images.to(device, non_blocking=True)
-            labels = labels.to(device, non_blocking=True)
-            total_loss += criterion(model(images), labels).item()
-    return total_loss / max(1, len(loader))
+        logits = model(tensor)               # (1, C, H, W, D)
+        labels = logits.argmax(dim=1)[0]     # (H, W, D)
+
+    labels_np = labels.cpu().numpy().astype(np.uint8)
+
+    # ── Stats ──
+    unique, counts = np.unique(labels_np, return_counts=True)
+    total_voxels   = labels_np.size
+    print(f"\n  Structures détectées :")
+    for u, c in zip(unique, counts):
+        if u > 0:
+            pct = c / total_voxels * 100
+            print(f"    Classe {u} ({CLASS_NAMES.get(u,'?'):<25}) : "
+                  f"{c:>8} voxels  ({pct:.1f}%)")
+
+    os.makedirs(output_dir, exist_ok=True)
+
+    # ── Sauvegarde NIfTI ──
+    if save_nifti:
+        # Resize back to original shape
+        labels_orig = unet_files.resize_volume(
+            labels_np.astype(np.float32), orig_shape, is_label=True
+        ).astype(np.uint8)
+        out_nii  = nib.Nifti1Image(labels_orig, affine)
+        base     = Path(input_path).stem.replace(".nii", "")
+        nii_path = os.path.join(output_dir, f"{base}_segmentation.nii.gz")
+        nib.save(out_nii, nii_path)
+        print(f"\n  [saved] Masque NIfTI  → {nii_path}")
+
+    # ── Sauvegarde PNG (slices colorées) ──
+    if save_png:
+        try:
+            import matplotlib
+            matplotlib.use("Agg")
+            import matplotlib.pyplot as plt
+
+            base    = Path(input_path).stem.replace(".nii", "")
+            depth   = TARGET_SIZE[2]
+            n_cols  = 8
+            n_rows  = (depth + n_cols - 1) // n_cols
+
+            fig, axes = plt.subplots(n_rows, n_cols,
+                                     figsize=(n_cols * 2, n_rows * 2))
+            fig.patch.set_facecolor("#070b12")
+            fig.suptitle(f"Segmentation — {base}", color="white", fontsize=12)
+
+            for d in range(depth):
+                row, col = divmod(d, n_cols)
+                ax = axes[row, col] if n_rows > 1 else axes[col]
+                ax.set_facecolor("#070b12")
+
+                # CT slice
+                ct_slice = img[:, :, d]
+                ax.imshow(ct_slice.T, cmap="gray", origin="lower",
+                          vmin=0, vmax=1)
+
+                # Segmentation overlay
+                lbl_slice = labels_np[:, :, d]
+                overlay   = np.zeros((*lbl_slice.shape, 4), dtype=np.float32)
+                for cls_id, (r, g, b) in CLASS_COLORS.items():
+                    if cls_id == 0:
+                        continue
+                    mask = lbl_slice == cls_id
+                    overlay[mask, 0] = r / 255
+                    overlay[mask, 1] = g / 255
+                    overlay[mask, 2] = b / 255
+                    overlay[mask, 3] = 0.65  # alpha
+
+                ax.imshow(overlay.transpose(1, 0, 2), origin="lower")
+                ax.set_title(f"z={d}", fontsize=5, color="#4a6080", pad=1)
+                ax.axis("off")
+
+            # Masque les axes vides
+            for d in range(depth, n_rows * n_cols):
+                row, col = divmod(d, n_cols)
+                ax = axes[row, col] if n_rows > 1 else axes[col]
+                ax.set_visible(False)
+
+            # Légende
+            from matplotlib.patches import Patch
+            patches = [
+                Patch(color=[r/255,g/255,b/255], label=f"{k} {CLASS_NAMES[k]}")
+                for k, (r,g,b) in CLASS_COLORS.items() if k > 0
+            ]
+            fig.legend(handles=patches, loc="lower center", ncol=5,
+                       fontsize=7, facecolor="#0d1520", labelcolor="white",
+                       bbox_to_anchor=(0.5, -0.02))
+
+            png_path = os.path.join(output_dir, f"{base}_segmentation_slices.png")
+            plt.savefig(png_path, dpi=150, bbox_inches="tight",
+                        facecolor=fig.get_facecolor())
+            plt.close(fig)
+            print(f"  [saved] Slices PNG    → {png_path}")
+
+        except ImportError:
+            print("  [warn] matplotlib non disponible — PNG non généré.")
+
+    return labels_np
 
 
 # ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
 
-def parse_patient_ids(text: Optional[str]) -> Optional[List[str]]:
-    if not text:
-        return None
-    return [pid.strip() for pid in text.split(",") if pid.strip()]
-
-
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="UNet3D — Pipeline 1: direct NIfTI file access.",
+        description="Inférence UNet3D + Entraînement K-Fold.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
-    parser.add_argument("--image-dir",      default=DEFAULT_IMAGE_DIR)
-    parser.add_argument("--label-dir",      default=DEFAULT_LABEL_DIR)
-    parser.add_argument("--patient-ids",    default=None,
-                        help="Comma-separated patient IDs (default: all)")
-    parser.add_argument("--target-size",    nargs=3, type=int, default=None,
-                        metavar=("H", "W", "D"))
-    parser.add_argument("--batch-size",     type=int, default=1)
-    parser.add_argument("--epochs",         type=int, default=1)
-    parser.add_argument("--num-workers",    type=int, default=0)
-    parser.add_argument("--train-ratio",    type=float, default=0.70,
-                        help="Fraction of patients for training (default 0.70)")
-    parser.add_argument("--val-ratio",      type=float, default=0.15,
-                        help="Fraction for validation (default 0.15) — test gets the rest")
-    parser.add_argument("--seed",           type=int, default=42)
-    parser.add_argument("--base-channels",  type=int, default=16)
-    parser.add_argument("--augment",        action="store_true",
-                        help="Enable data augmentation on the training set")
-    parser.add_argument("--no-normalize",   action="store_true")
+    sub = parser.add_subparsers(dest="mode", required=True)
+
+    # ── train ──
+    p_train = sub.add_parser("train", help="Entraînement K-Fold complet")
+    p_train.add_argument("--image-dir",  default=unet_files.DEFAULT_IMAGE_DIR)
+    p_train.add_argument("--label-dir",  default=unet_files.DEFAULT_LABEL_DIR)
+    p_train.add_argument("--epochs",     type=int, default=150,
+                         help="Nombre d'epochs par fold (défaut 150, early stopping inclus)")
+    p_train.add_argument("--base-channels", type=int, default=BASE_CHANNELS,
+                         help=f"Canaux de base UNet3D (défaut {BASE_CHANNELS})")
+    p_train.add_argument("--augment",    action="store_true",
+                         help="Activer la data augmentation sur le train set")
+    p_train.add_argument("--no-augment", action="store_true")
+
+    # ── infer ──
+    p_infer = sub.add_parser("infer", help="Inférence sur un fichier NIfTI")
+    p_infer.add_argument("--input",      required=True,
+                         help="Chemin vers le fichier .nii / .nii.gz")
+    p_infer.add_argument("--output",     default=OUTPUT_DIR)
+    p_infer.add_argument("--model",      default=None,
+                         help="Chemin vers le .pth (défaut: models/unet3d_best.pth)")
+    p_infer.add_argument("--fold",       type=int, default=None,
+                         help="Utiliser le modèle d'un fold spécifique (1-5)")
+    p_infer.add_argument("--no-png",     action="store_true")
+    p_infer.add_argument("--no-nifti",   action="store_true")
+
     args = parser.parse_args()
-
-    patient_ids = parse_patient_ids(args.patient_ids)
-    items       = list_patient_files(args.image_dir, args.label_dir)
-    items       = filter_items(items, patient_ids)
-    target_size = tuple(args.target_size) if args.target_size else None
-
-    train_loader, val_loader, test_loader = create_dataloaders(
-        items,
-        batch_size=args.batch_size,
-        num_workers=args.num_workers,
-        train_split=0.8,                  # ignored when use_three_way_split=True
-        target_size=target_size,
-        normalize=not args.no_normalize,
-        seed=args.seed,
-        augment=args.augment,
-        train_ratio=args.train_ratio,
-        val_ratio=args.val_ratio,
-        use_three_way_split=True,
-    )
-
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print(f"Device   : {device}")
-    print(f"Augment  : {args.augment}")
 
-    model     = build_model(base_channels=args.base_channels).to(device)
-    criterion = nn.CrossEntropyLoss()
-    optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
+    if args.mode == "train":
+        augment = not args.no_augment
+        train_kfold(
+            image_dir=args.image_dir,
+            label_dir=args.label_dir,
+            epochs=args.epochs,
+            augment=augment,
+            device=device,
+        )
 
-    for epoch in range(1, args.epochs + 1):
-        train_loss = run_epoch(model, train_loader, optimizer, criterion, device)
-        log = f"Epoch {epoch:>3}: train_loss={train_loss:.4f}"
-
-        if val_loader:
-            val_loss = evaluate(model, val_loader, criterion, device)
-            seg_val  = evaluate_segmentation(model, val_loader, device)
-            log += (f"  val_loss={val_loss:.4f}"
-                    f"  Dice={seg_val['mean_dice_fg']:.4f}"
-                    f"  IoU={seg_val['mean_iou_fg']:.4f}"
-                    f"  Combined={seg_val['combined_score']:.4f}")
-        print(log)
-
-    # --- Final test evaluation ---
-    if test_loader:
-        print("\n  == TEST SET EVALUATION ==")
-        seg_test = evaluate_segmentation(model, test_loader, device)
-        print(f"  Mean Dice  (fg): {seg_test['mean_dice_fg']:.4f}")
-        print(f"  Mean IoU   (fg): {seg_test['mean_iou_fg']:.4f}")
-        print(f"  Combined score : {seg_test['combined_score']:.4f}")
-        for c in range(1, NUM_CLASSES):
-            print(f"    class {c} — Dice={seg_test[f'dice_class_{c}']:.4f}"
-                  f"  IoU={seg_test[f'iou_class_{c}']:.4f}")
+    elif args.mode == "infer":
+        infer_volume(
+            input_path=args.input,
+            model_path=args.model,
+            output_dir=args.output,
+            fold=args.fold,
+            device=device,
+            save_nifti=not args.no_nifti,
+            save_png=not args.no_png,
+        )
 
 
 if __name__ == "__main__":
