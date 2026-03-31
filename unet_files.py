@@ -38,6 +38,9 @@ import time
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
+from dotenv import load_dotenv
+load_dotenv()
+
 import nibabel as nib
 import numpy as np
 import torch
@@ -58,9 +61,11 @@ except ImportError:
 # Configuration
 # ---------------------------------------------------------------------------
 
+DEFAULT_IMAGE_DIR = os.getenv("TOPBRAIN_IMAGE_DIR", "")
+DEFAULT_LABEL_DIR = os.getenv("TOPBRAIN_LABEL_DIR", "")
 OUTPUT_DIR   = "results"
 MODELS_DIR   = "models"
-NUM_CLASSES  = unet_files.NUM_CLASSES   # 6
+NUM_CLASSES  =  6 # unet_files.NUM_CLASSES   # 6
 TARGET_SIZE  = (128, 128, 64)
 K_FOLDS      = 5
 N_TEST_HOLD  = 5
@@ -85,6 +90,368 @@ CLASS_NAMES = {
     4: "Matière grise",
     5: "Structures profondes",
 }
+
+
+# ---------------------------------------------------------------------------
+# Preprocessing helpers
+# ---------------------------------------------------------------------------
+
+def resize_volume(
+    volume:      np.ndarray,
+    target_size: Tuple[int, int, int],
+    is_label:    bool = False,
+) -> np.ndarray:
+    """Resize using scipy zoom. Nearest-neighbor for labels, linear for images."""
+    from scipy.ndimage import zoom
+    zoom_factors = [target_size[i] / volume.shape[i] for i in range(3)]
+    order = 0 if is_label else 1
+    return zoom(volume, zoom_factors, order=order)
+
+
+def normalize_volume(
+    volume:     np.ndarray,
+    window_min: Optional[float] = None,
+    window_max: Optional[float] = None,
+) -> np.ndarray:
+    """Min-Max normalization to [0, 1], with optional HU windowing."""
+    out = volume.astype(np.float32, copy=False)
+    if window_min is not None and window_max is not None:
+        out = np.clip(out, float(window_min), float(window_max))
+    vmin, vmax = out.min(), out.max()
+    if vmax - vmin > 0:
+        out = (out - vmin) / (vmax - vmin)
+    return out
+
+
+# ---------------------------------------------------------------------------
+# Model
+# ---------------------------------------------------------------------------
+
+class DoubleConv3D(nn.Module):
+    def __init__(self, in_channels: int, out_channels: int) -> None:
+        super().__init__()
+        self.block = nn.Sequential(
+            nn.Conv3d(in_channels, out_channels, kernel_size=3, padding=1, bias=False),
+            nn.BatchNorm3d(out_channels),
+            nn.ReLU(inplace=True),
+            nn.Conv3d(out_channels, out_channels, kernel_size=3, padding=1, bias=False),
+            nn.BatchNorm3d(out_channels),
+            nn.ReLU(inplace=True),
+        )
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.block(x)
+
+
+class UNet3D(nn.Module):
+    def __init__(
+        self,
+        in_channels:   int = 1,
+        out_channels:  int = 6,
+        base_channels: int = 16,
+    ) -> None:
+        super().__init__()
+        bc = base_channels
+        self.enc1  = DoubleConv3D(in_channels, bc)
+        self.pool1 = nn.MaxPool3d(2)
+        self.enc2  = DoubleConv3D(bc, bc * 2)
+        self.pool2 = nn.MaxPool3d(2)
+        self.enc3  = DoubleConv3D(bc * 2, bc * 4)
+        self.pool3 = nn.MaxPool3d(2)
+        self.bottleneck = DoubleConv3D(bc * 4, bc * 8)
+        self.up3  = nn.ConvTranspose3d(bc * 8, bc * 4, kernel_size=2, stride=2)
+        self.dec3 = DoubleConv3D(bc * 8, bc * 4)
+        self.up2  = nn.ConvTranspose3d(bc * 4, bc * 2, kernel_size=2, stride=2)
+        self.dec2 = DoubleConv3D(bc * 4, bc * 2)
+        self.up1  = nn.ConvTranspose3d(bc * 2, bc, kernel_size=2, stride=2)
+        self.dec1 = DoubleConv3D(bc * 2, bc)
+        self.final = nn.Conv3d(bc, out_channels, kernel_size=1)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        e1 = self.enc1(x)
+        e2 = self.enc2(self.pool1(e1))
+        e3 = self.enc3(self.pool2(e2))
+        bn = self.bottleneck(self.pool3(e3))
+        d3 = self.dec3(torch.cat([self.up3(bn), e3], dim=1))
+        d2 = self.dec2(torch.cat([self.up2(d3), e2], dim=1))
+        d1 = self.dec1(torch.cat([self.up1(d2), e1], dim=1))
+        return self.final(d1)
+
+
+def build_model(base_channels: int = BASE_CHANNELS) -> nn.Module:
+    return UNet3D(in_channels=1, out_channels=NUM_CLASSES, base_channels=base_channels)
+
+
+# ---------------------------------------------------------------------------
+# Dataset & DataLoaders (file-based NIfTI)
+# ---------------------------------------------------------------------------
+
+class NIfTIDataset(torch.utils.data.Dataset):
+    """Loads NIfTI volumes from disk, resizes and optionally normalizes/augments."""
+
+    def __init__(
+        self,
+        items:       List[Dict[str, str]],
+        target_size: Optional[Tuple[int, int, int]] = None,
+        normalize:   bool = True,
+        augment:     bool = False,
+        seed:        int  = 42,
+    ) -> None:
+        self.items       = items
+        self.target_size = target_size
+        self.normalize   = normalize
+        self.augment     = augment
+        self.seed        = seed
+        self._transforms = None
+        if augment:
+            try:
+                from monai.transforms import Compose, RandFlipd, RandAffined, RandGaussianNoised
+                self._transforms = Compose([
+                    RandFlipd(keys=["image", "label"], prob=0.5, spatial_axis=0),
+                    RandAffined(
+                        keys=["image", "label"], prob=0.5,
+                        rotate_range=(0.20, 0.10, 0.10),
+                        scale_range=(0.10, 0.10, 0.10),
+                        mode=("bilinear", "nearest"),
+                        padding_mode="zeros",
+                    ),
+                    RandGaussianNoised(keys=["image"], prob=0.3, mean=0.0, std=0.05),
+                ])
+                self._transforms.set_random_state(seed)
+            except ImportError:
+                print("  [warn] MONAI transforms non disponibles — augmentation désactivée")
+                self.augment = False
+
+    def __len__(self) -> int:
+        return len(self.items)
+
+    def __getitem__(self, idx: int):
+        item = self.items[idx]
+        img = nib.load(item["img_path"]).get_fdata().astype(np.float32)
+        lbl = nib.load(item["lbl_path"]).get_fdata().astype(np.int64)
+        lbl = np.clip(lbl, 0, NUM_CLASSES - 1)
+
+        if self.target_size is not None:
+            img = resize_volume(img, self.target_size, is_label=False)
+            lbl = resize_volume(lbl.astype(np.float32), self.target_size, is_label=True).astype(np.int64)
+
+        if self.normalize:
+            img = normalize_volume(img)
+
+        if self.augment and self._transforms is not None:
+            sample = {
+                "image": img[None, ...],
+                "label": lbl[None, ...].astype(np.float32),
+            }
+            out = self._transforms(sample)
+            img = np.asarray(out["image"][0], dtype=np.float32)
+            lbl = np.asarray(out["label"][0], dtype=np.int64)
+
+        img_t = torch.from_numpy(img).float().unsqueeze(0)   # (1, H, W, D)
+        lbl_t = torch.from_numpy(lbl).long()                  # (H, W, D)
+        return img_t, lbl_t
+
+
+def create_dataloaders(
+    items:       List[Dict[str, str]],
+    batch_size:  int,
+    num_workers: int   = 0,
+    train_split: float = 1.0,
+    target_size: Optional[Tuple[int, int, int]] = None,
+    normalize:   bool  = True,
+    seed:        int   = 42,
+    augment:     bool  = False,
+    use_three_way_split: bool = False,
+) -> Tuple[DataLoader, Optional[DataLoader], Optional[DataLoader]]:
+    """Build DataLoaders from a list of NIfTI file items."""
+    dataset = NIfTIDataset(
+        items=items, target_size=target_size,
+        normalize=normalize, augment=augment, seed=seed,
+    )
+
+    if train_split >= 1.0:
+        loader = DataLoader(
+            dataset, batch_size=batch_size, shuffle=True,
+            num_workers=num_workers, pin_memory=torch.cuda.is_available(),
+        )
+        return loader, None, None
+
+    rng     = random.Random(seed)
+    indices = list(range(len(dataset)))
+    rng.shuffle(indices)
+    split   = int(len(indices) * train_split)
+    train_ds = torch.utils.data.Subset(dataset, indices[:split])
+    val_ds   = torch.utils.data.Subset(dataset, indices[split:])
+
+    train_loader = DataLoader(
+        train_ds, batch_size=batch_size, shuffle=True,
+        num_workers=num_workers, pin_memory=torch.cuda.is_available(),
+    )
+    val_loader = DataLoader(
+        val_ds, batch_size=batch_size, shuffle=False,
+        num_workers=num_workers, pin_memory=torch.cuda.is_available(),
+    )
+    return train_loader, val_loader, None
+
+
+# ---------------------------------------------------------------------------
+# Training helpers
+# ---------------------------------------------------------------------------
+
+def run_epoch(
+    model:     nn.Module,
+    loader:    DataLoader,
+    optimizer: torch.optim.Optimizer,
+    criterion: nn.Module,
+    device:    torch.device,
+) -> float:
+    """Run one training epoch, return average loss."""
+    model.train()
+    total_loss = 0.0
+    count = 0
+    for images, labels in loader:
+        images = images.to(device, non_blocking=True)
+        labels = labels.to(device, non_blocking=True)
+        optimizer.zero_grad(set_to_none=True)
+        logits = model(images)
+        loss = criterion(logits, labels)
+        loss.backward()
+        optimizer.step()
+        total_loss += loss.item()
+        count += 1
+    return total_loss / max(1, count)
+
+
+def evaluate(
+    model:     nn.Module,
+    loader:    DataLoader,
+    criterion: nn.Module,
+    device:    torch.device,
+) -> float:
+    """Evaluate validation loss."""
+    model.eval()
+    total_loss = 0.0
+    count = 0
+    with torch.no_grad():
+        for images, labels in loader:
+            images = images.to(device, non_blocking=True)
+            labels = labels.to(device, non_blocking=True)
+            total_loss += criterion(model(images), labels).item()
+            count += 1
+    return total_loss / max(1, count)
+
+
+# ---------------------------------------------------------------------------
+# Segmentation metrics
+# ---------------------------------------------------------------------------
+
+def compute_slice_averaged_metrics(
+    preds:       torch.Tensor,
+    targets:     torch.Tensor,
+    num_classes: int   = NUM_CLASSES,
+    smooth:      float = 1e-6,
+) -> Dict[str, float]:
+    """Compute per-class Dice, IoU, and combined score."""
+    result: Dict[str, float] = {}
+    dice_fg = []
+    iou_fg  = []
+
+    for cls in range(num_classes):
+        p = (preds == cls).float()
+        t = (targets == cls).float()
+        inter = (p * t).sum()
+        p_sum = p.sum()
+        t_sum = t.sum()
+        union = p_sum + t_sum - inter
+        dice = float((2.0 * inter + smooth) / (p_sum + t_sum + smooth))
+        iou  = float((inter + smooth) / (union + smooth))
+        result[f"dice_class_{cls}"] = dice
+        result[f"iou_class_{cls}"]  = iou
+        if cls > 0:
+            dice_fg.append(dice)
+            iou_fg.append(iou)
+
+    result["mean_dice_fg"]   = float(sum(dice_fg) / len(dice_fg)) if dice_fg else 0.0
+    result["mean_iou_fg"]    = float(sum(iou_fg)  / len(iou_fg))  if iou_fg  else 0.0
+    result["combined_score"] = 0.5 * (result["mean_dice_fg"] + result["mean_iou_fg"])
+    return result
+
+
+def evaluate_segmentation(
+    model:       nn.Module,
+    loader:      DataLoader,
+    device:      torch.device,
+    num_classes: int = NUM_CLASSES,
+) -> Dict[str, float]:
+    """Run model on loader and return aggregated segmentation metrics."""
+    model.eval()
+    all_preds   = []
+    all_targets = []
+    with torch.no_grad():
+        for images, labels in loader:
+            images = images.to(device, non_blocking=True)
+            logits = model(images)
+            preds  = logits.argmax(dim=1)
+            all_preds.append(preds.cpu())
+            all_targets.append(labels.cpu())
+    all_preds   = torch.cat(all_preds,   dim=0)
+    all_targets = torch.cat(all_targets, dim=0)
+    return compute_slice_averaged_metrics(all_preds, all_targets, num_classes)
+
+
+# ---------------------------------------------------------------------------
+# File discovery helpers
+# ---------------------------------------------------------------------------
+
+def parse_patient_id_from_filename(filename: str) -> str:
+    """Extract patient ID — e.g. topbrain_ct_001_0000.nii.gz -> '001'."""
+    name  = filename.replace(".nii.gz", "").replace(".nii", "")
+    parts = name.split("_")
+    return parts[2] if len(parts) >= 3 else name
+
+
+def resolve_label_path(image_filename: str, label_dir: str) -> Optional[str]:
+    """Find the label file matching a given image filename."""
+    base = image_filename
+    if base.endswith(".nii.gz"):
+        base = base[:-7]
+    elif base.endswith(".nii"):
+        base = base[:-4]
+
+    base_no_suffix = base.replace("_0000", "")
+
+    candidates = [
+        f"{base}.nii.gz",        f"{base}.nii",
+        f"{base_no_suffix}.nii.gz", f"{base_no_suffix}.nii",
+        f"{base}_seg.nii.gz",    f"{base}_seg.nii",
+        f"{base}_label.nii.gz",  f"{base}_label.nii",
+        f"{base}_labels.nii.gz", f"{base}_labels.nii",
+    ]
+    for name in candidates:
+        path = os.path.join(label_dir, name)
+        if os.path.exists(path):
+            return path
+    return None
+
+
+def list_patient_files(image_dir: str, label_dir: str) -> List[Dict[str, str]]:
+    """Return sorted list of {patient_id, img_path, lbl_path} dicts."""
+    if not os.path.isdir(image_dir):
+        raise FileNotFoundError(f"Image directory not found: {image_dir}")
+    if not os.path.isdir(label_dir):
+        raise FileNotFoundError(f"Label directory not found: {label_dir}")
+
+    items: List[Dict[str, str]] = []
+    for filename in sorted(os.listdir(image_dir)):
+        if not (filename.endswith(".nii.gz") or filename.endswith(".nii")):
+            continue
+        pid      = parse_patient_id_from_filename(filename)
+        img_path = os.path.join(image_dir, filename)
+        lbl_path = resolve_label_path(filename, label_dir)
+        if not lbl_path:
+            continue
+        items.append({"patient_id": pid, "img_path": img_path, "lbl_path": lbl_path})
+    return sorted(items, key=lambda x: str(x["patient_id"]))
 
 
 # ---------------------------------------------------------------------------
