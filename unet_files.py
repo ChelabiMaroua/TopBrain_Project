@@ -60,7 +60,7 @@ except ImportError:
 
 OUTPUT_DIR   = "results"
 MODELS_DIR   = "models"
-NUM_CLASSES  = unet_files.NUM_CLASSES   # 6
+NUM_CLASSES  = 6 #unet_files.NUM_CLASSES   # 6
 TARGET_SIZE  = (128, 128, 64)
 K_FOLDS      = 5
 N_TEST_HOLD  = 5
