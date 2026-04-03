@@ -10,9 +10,12 @@ import cv2
 import nibabel as nib
 import numpy as np
 from bson import BSON
+from dotenv import load_dotenv
 from pymongo import MongoClient
 from scipy.ndimage import zoom
 from torch.utils.data import DataLoader, Dataset
+
+load_dotenv()
 
 ROOT = Path(__file__).resolve().parent
 EXTRACT_DIR = ROOT / "1_ETL" / "Extract"
@@ -20,8 +23,6 @@ if str(EXTRACT_DIR) not in sys.path:
     sys.path.insert(0, str(EXTRACT_DIR))
 
 from extract_t0_list_patient_files import (  # type: ignore
-    FALLBACK_IMAGE_DIR,
-    FALLBACK_LABEL_DIR,
     detect_existing_dir,
     list_patient_files,
 )
@@ -377,21 +378,26 @@ def build_from_benchmark_latency(benchmark_json: str) -> Dict:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Measure real KPI2/3/4 (+KPI1 from benchmark) for Files/Binary/Polygones")
-    parser.add_argument("--mongo-uri", default="mongodb://localhost:27017")
-    parser.add_argument("--db-name", default="TopBrain_DB")
-    parser.add_argument("--image-dir", default="")
-    parser.add_argument("--label-dir", default="")
+    parser.add_argument("--mongo-uri", default=os.getenv("MONGO_URI", "mongodb://localhost:27017"))
+    parser.add_argument("--db-name", default=os.getenv("MONGO_DB_NAME", "TopBrain_DB"))
+    parser.add_argument("--image-dir", default=os.getenv("TOPBRAIN_IMAGE_DIR", ""))
+    parser.add_argument("--label-dir", default=os.getenv("TOPBRAIN_LABEL_DIR", ""))
     parser.add_argument("--target-size", nargs=3, type=int, default=[128, 128, 64])
     parser.add_argument("--num-classes", type=int, default=6)
     parser.add_argument("--sample-patients", type=int, default=12)
     parser.add_argument("--batch-sizes", nargs="+", type=int, default=[4, 8])
     parser.add_argument("--workers", nargs="+", type=int, default=[0, 1, 2, 4, 8])
-    parser.add_argument("--benchmark-json", default="benchmark_results.json")
-    parser.add_argument("--output-json", default="Graphs/kpi_real_metrics.json")
+    parser.add_argument("--benchmark-json", default=os.getenv("TOPBRAIN_BENCHMARK_JSON", ""))
+    parser.add_argument("--output-json", default=os.getenv("TOPBRAIN_KPI_OUTPUT_JSON", ""))
     args = parser.parse_args()
 
-    image_dir = detect_existing_dir(args.image_dir, FALLBACK_IMAGE_DIR)
-    label_dir = detect_existing_dir(args.label_dir, FALLBACK_LABEL_DIR)
+    if not args.benchmark_json:
+        raise ValueError("TOPBRAIN_BENCHMARK_JSON is required (.env or --benchmark-json).")
+    if not args.output_json:
+        raise ValueError("TOPBRAIN_KPI_OUTPUT_JSON is required (.env or --output-json).")
+
+    image_dir = detect_existing_dir(args.image_dir)
+    label_dir = detect_existing_dir(args.label_dir)
     target_size = (args.target_size[0], args.target_size[1], args.target_size[2])
     target_size_key = f"{target_size[0]}x{target_size[1]}x{target_size[2]}"
 

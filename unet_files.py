@@ -42,9 +42,12 @@ import nibabel as nib
 import numpy as np
 import torch
 import torch.nn as nn
+from dotenv import load_dotenv
 from torch.utils.data import DataLoader
 
 import unet_files
+
+load_dotenv()
 
 # DiceCELoss MONAI — résout le problème de Dice=0.0000
 try:
@@ -58,8 +61,8 @@ except ImportError:
 # Configuration
 # ---------------------------------------------------------------------------
 
-OUTPUT_DIR   = "results"
-MODELS_DIR   = "models"
+OUTPUT_DIR   = os.getenv("TOPBRAIN_RESULTS_DIR", "")
+MODELS_DIR   = os.getenv("TOPBRAIN_MODELS_DIR", "")
 NUM_CLASSES  = 6 #unet_files.NUM_CLASSES   # 6
 TARGET_SIZE  = (128, 128, 64)
 K_FOLDS      = 5
@@ -635,6 +638,11 @@ def infer_volume(
 # ---------------------------------------------------------------------------
 
 def main() -> None:
+    if not OUTPUT_DIR:
+        raise ValueError("TOPBRAIN_RESULTS_DIR is required in .env.")
+    if not MODELS_DIR:
+        raise ValueError("TOPBRAIN_MODELS_DIR is required in .env.")
+
     parser = argparse.ArgumentParser(
         description="Inférence UNet3D + Entraînement K-Fold.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,

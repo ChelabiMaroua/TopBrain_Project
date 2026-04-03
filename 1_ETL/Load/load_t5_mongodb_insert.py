@@ -22,8 +22,6 @@ for path in (PROJECT_ROOT, ETL_ROOT):
         sys.path.insert(0, path_str)
 
 from Extract.extract_t0_list_patient_files import (
-    FALLBACK_IMAGE_DIR,
-    FALLBACK_LABEL_DIR,
     detect_existing_dir,
     list_patient_files,
 )
@@ -286,8 +284,8 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    image_dir = detect_existing_dir(args.image_dir, FALLBACK_IMAGE_DIR)
-    label_dir = detect_existing_dir(args.label_dir, FALLBACK_LABEL_DIR)
+    image_dir = detect_existing_dir(args.image_dir)
+    label_dir = detect_existing_dir(args.label_dir)
     target_size = (args.target_size[0], args.target_size[1], args.target_size[2])
 
     populate_binary_collection(

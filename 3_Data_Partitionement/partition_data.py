@@ -1,9 +1,13 @@
 import argparse
 import json
+import os
 import random
 import sys
 from pathlib import Path
+from dotenv import load_dotenv
 from pymongo import MongoClient
+
+load_dotenv()
 
 def get_unique_patients_from_db(mongo_uri, db_name, collection_name):
     """Récupère la liste de tous les IDs patients uniques (ex: topcow_ct_001)."""
@@ -24,9 +28,9 @@ def main():
     parser = argparse.ArgumentParser(description="Générer une partition K-Fold dynamique depuis MongoDB")
     
     # Paramètres de connexion
-    parser.add_argument("--mongo-uri", default="mongodb://localhost:27017")
-    parser.add_argument("--db-name", default="TopBrain_DB")
-    parser.add_argument("--collection", default="MultiClassPatients")
+    parser.add_argument("--mongo-uri", default=os.getenv("MONGO_URI", "mongodb://localhost:27017"))
+    parser.add_argument("--db-name", default=os.getenv("MONGO_DB_NAME", "TopBrain_DB"))
+    parser.add_argument("--collection", default=os.getenv("MONGO_BINARY_COLLECTION", "MultiClassPatients"))
     
     # Paramètres de partitionnement
     parser.add_argument("--k", type=int, default=5, help="Nombre de Folds")
@@ -35,9 +39,12 @@ def main():
     parser.add_argument("--seed", type=int, default=42, help="Seed pour la reproductibilité")
     
     # Sortie
-    parser.add_argument("--output", default="3_Data_Partitionement/partition_materialized.json")
+    parser.add_argument("--output", default=os.getenv("TOPBRAIN_PARTITION_FILE", ""))
     
     args = parser.parse_args()
+
+    if not args.output:
+        raise ValueError("TOPBRAIN_PARTITION_FILE is required (.env or --output).")
 
     # Fixer la graine aléatoire pour que le tirage soit toujours le même
     random.seed(args.seed)

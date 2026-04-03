@@ -1,5 +1,6 @@
 import argparse
 import json
+import os
 import random
 import re
 import sys
@@ -9,9 +10,12 @@ from typing import Dict, List, Optional, Tuple
 import numpy as np
 import torch
 import torch.nn as nn
+from dotenv import load_dotenv
 from monai.losses import DiceCELoss
 from pymongo import MongoClient
 from torch.utils.data import DataLoader, Dataset
+
+load_dotenv()
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -208,11 +212,11 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description="UNet3D training with Binary MongoDB + partition + optional MONAI augmentation"
     )
-    parser.add_argument("--mongo-uri", default="mongodb://localhost:27017")
-    parser.add_argument("--db-name", default="TopBrain_DB")
-    parser.add_argument("--collection", default="MultiClassPatients")
-    parser.add_argument("--target-size", default="128x128x64")
-    parser.add_argument("--partition-file", default="3_Data_Partitionement/partition_materialized.json")
+    parser.add_argument("--mongo-uri", default=os.getenv("MONGO_URI", "mongodb://localhost:27017"))
+    parser.add_argument("--db-name", default=os.getenv("MONGO_DB_NAME", "TopBrain_DB"))
+    parser.add_argument("--collection", default=os.getenv("MONGO_BINARY_COLLECTION", "MultiClassPatients"))
+    parser.add_argument("--target-size", default=os.getenv("TOPBRAIN_TARGET_SIZE", "128x128x64"))
+    parser.add_argument("--partition-file", default=os.getenv("TOPBRAIN_PARTITION_FILE", ""))
     parser.add_argument("--fold", default="fold_1", choices=["fold_1", "fold_2", "fold_3", "fold_4", "fold_5"])
     parser.add_argument("--epochs", type=int, default=100)
     parser.add_argument("--batch-size", type=int, default=1)
@@ -250,7 +254,7 @@ def main() -> None:
     # FIX: add save path for best model weights
     parser.add_argument(
         "--save-dir",
-        default="4_Unet3D/checkpoints",
+        default=os.getenv("TOPBRAIN_CHECKPOINT_DIR", ""),
         help="Dossier où sauvegarder le meilleur modèle (unet3d_best_<fold>.pth).",
     )
     parser.add_argument(
@@ -260,6 +264,11 @@ def main() -> None:
         help="Arrêt si pas d'amélioration du combined score après N epochs. 0 = désactivé.",
     )
     args = parser.parse_args()
+
+    if not args.partition_file:
+        raise ValueError("TOPBRAIN_PARTITION_FILE is required (.env or --partition-file).")
+    if not args.save_dir:
+        raise ValueError("TOPBRAIN_CHECKPOINT_DIR is required (.env or --save-dir).")
 
     random.seed(args.seed)
     np.random.seed(args.seed)

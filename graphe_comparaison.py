@@ -33,11 +33,14 @@ from typing import Dict, List, Optional
 import matplotlib.patches as mpatches
 import matplotlib.pyplot as plt
 import numpy as np
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # ---------------------------------------------------------------------------
 # Output folder
 # ---------------------------------------------------------------------------
-GRAPHS_DIR = "Graphs"
+GRAPHS_DIR = os.getenv("TOPBRAIN_GRAPHS_DIR", "")
 
 # ---------------------------------------------------------------------------
 # Consistent color palette across all figures

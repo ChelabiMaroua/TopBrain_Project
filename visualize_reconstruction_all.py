@@ -46,7 +46,7 @@ load_dotenv()
 DEFAULT_IMG_DIR = os.getenv("TOPBRAIN_IMAGE_DIR", "")
 DEFAULT_LBL_DIR = os.getenv("TOPBRAIN_LABEL_DIR", "")
 
-RECONSTRUCTION_DIR = "Reconstruction"
+RECONSTRUCTION_DIR = os.getenv("TOPBRAIN_RECONSTRUCTION_DIR", "")
 
 MAX_LABEL      = 5
 EPSILON        = 1.0   # polygon approximation parameter
@@ -592,6 +592,9 @@ def main() -> None:
     parser.add_argument("--outdir",        default=RECONSTRUCTION_DIR,
                         help="Output folder for PNG figures")
     args = parser.parse_args()
+
+    if not args.outdir:
+        raise ValueError("TOPBRAIN_RECONSTRUCTION_DIR is required (.env or --outdir).")
 
     target_size = tuple(args.target_size) if args.target_size else None
 

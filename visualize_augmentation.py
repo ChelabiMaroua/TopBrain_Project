@@ -18,6 +18,9 @@ import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
 import nibabel as nib
 import numpy as np
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # Importe les fonctions de ton pipeline
 import unet_files
@@ -76,6 +79,8 @@ AUGMENTATION_NAMES = [
     "Zoom crop",
     "Combiné (aléatoire)",
 ]
+
+DEFAULT_OUTPUT_DIR = os.getenv("TOPBRAIN_GRAPHS_DIR", "")
 
 def apply_specific_aug(img, lbl, aug_name: str, rng) -> tuple:
     """Applique une augmentation spécifique pour la visualisation."""
@@ -326,11 +331,14 @@ def main() -> None:
                         help="Nombre de colonnes d'augmentation à afficher (max 6)")
     parser.add_argument("--axis",         type=int, default=2, choices=[0, 1, 2],
                         help="Axe de la slice : 0=sagittal 1=coronal 2=axial")
-    parser.add_argument("--output-dir",   default="Graphs",
+    parser.add_argument("--output-dir",   default=DEFAULT_OUTPUT_DIR,
                         help="Dossier de sauvegarde des images (vide = affichage)")
     parser.add_argument("--no-save",      action="store_true",
                         help="Affiche dans une fenêtre au lieu de sauvegarder")
     args = parser.parse_args()
+
+    if not args.no_save and not args.output_dir:
+        raise ValueError("TOPBRAIN_GRAPHS_DIR is required (.env or --output-dir).")
 
     target_size = tuple(args.target_size) if args.target_size else None
     n_aug       = min(args.n_aug, len(AUGMENTATION_NAMES))

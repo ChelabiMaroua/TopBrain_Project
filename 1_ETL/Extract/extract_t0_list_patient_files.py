@@ -16,20 +16,6 @@ except ImportError:
 
 load_dotenv()
 
-# Fixed Fallback Paths (based on your environment)
-FALLBACK_IMAGE_DIR = (
-    r"C:\Users\LENOVO\Desktop\PFFECerine"
-    r"\TopBrain_Data_Release_Batches1n2_081425"
-    r"\TopBrain_Data_Release_Batches1n2_081425"
-    r"\imagesTr_topbrain_ct"
-)
-FALLBACK_LABEL_DIR = (
-    r"C:\Users\LENOVO\Desktop\PFFECerine"
-    r"\TopBrain_Data_Release_Batches1n2_081425"
-    r"\TopBrain_Data_Release_Batches1n2_081425"
-    r"\labelsTr_topbrain_ct"
-)
-
 
 def strip_nii_extension(filename: str) -> str:
     """Supprime .nii ou .nii.gz d'un nom de fichier."""
@@ -112,12 +98,13 @@ def list_patient_files(image_dir: str, label_dir: str) -> List[Dict[str, str]]:
     return sorted(items, key=sort_key)
 
 
-def detect_existing_dir(preferred: str, fallback: str) -> str:
+def detect_existing_dir(preferred: str) -> str:
     if preferred and os.path.isdir(preferred):
         return preferred
-    if os.path.isdir(fallback):
-        return fallback
-    raise FileNotFoundError(f"No valid directory found.")
+    raise FileNotFoundError(
+        "No valid directory found. Set paths in .env "
+        "(TOPBRAIN_IMAGE_DIR / TOPBRAIN_LABEL_DIR) or pass CLI args."
+    )
 
 
 def summarize_extraction(items: List[Dict[str, str]]) -> Dict[str, str]:
@@ -151,8 +138,8 @@ def main() -> None:
     parser.add_argument("--output-json", default="")
     args = parser.parse_args()
 
-    image_dir = detect_existing_dir(args.image_dir, FALLBACK_IMAGE_DIR)
-    label_dir = detect_existing_dir(args.label_dir, FALLBACK_LABEL_DIR)
+    image_dir = detect_existing_dir(args.image_dir)
+    label_dir = detect_existing_dir(args.label_dir)
 
     pairs = list_patient_files(image_dir, label_dir)
 

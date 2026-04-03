@@ -5,6 +5,9 @@ from typing import Dict, List
 
 import matplotlib.pyplot as plt
 import numpy as np
+from dotenv import load_dotenv
+
+load_dotenv()
 
 
 DEFAULT_DATA = {
@@ -247,7 +250,7 @@ def main() -> None:
     parser.add_argument("--data-json", default="", help="Chemin JSON des métriques (optionnel)")
     parser.add_argument(
         "--benchmark-json",
-        default="benchmark_results.json",
+        default=os.getenv("TOPBRAIN_BENCHMARK_JSON", ""),
         help="Benchmark JSON (used for real-only extraction)",
     )
     parser.add_argument(
@@ -255,8 +258,13 @@ def main() -> None:
         action="store_true",
         help="Use measured values only and fail if any KPI is missing",
     )
-    parser.add_argument("--outdir", default="Graphs", help="Dossier de sortie des figures")
+    parser.add_argument("--outdir", default=os.getenv("TOPBRAIN_GRAPHS_DIR", ""), help="Dossier de sortie des figures")
     args = parser.parse_args()
+
+    if not args.outdir:
+        raise ValueError("TOPBRAIN_GRAPHS_DIR is required (.env or --outdir).")
+    if args.real_only and not args.data_json and not args.benchmark_json:
+        raise ValueError("TOPBRAIN_BENCHMARK_JSON is required for --real-only mode.")
 
     if args.real_only:
         if args.data_json:

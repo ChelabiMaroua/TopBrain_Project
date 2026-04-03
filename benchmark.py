@@ -37,12 +37,15 @@ from typing import Dict, List, Optional, Tuple
 import numpy as np
 import torch
 import torch.nn as nn
+from dotenv import load_dotenv
 
 import unet_files
 import unet_mongo_binary
 import unet_mongo_polygons
 
-GRAPHS_DIR = "Graphs"
+load_dotenv()
+
+GRAPHS_DIR = os.getenv("TOPBRAIN_GRAPHS_DIR", "")
 
 
 # ---------------------------------------------------------------------------
@@ -637,11 +640,18 @@ def main() -> None:
     parser.add_argument("--skip-poly",       action="store_true")
     parser.add_argument("--skip-binary",     action="store_true")
     parser.add_argument("--export-json",
-                        default=os.path.join(GRAPHS_DIR, "benchmark_results.json"))
+                        default=os.getenv("TOPBRAIN_BENCHMARK_JSON", ""))
     args = parser.parse_args()
 
+    if not args.export_json:
+        raise ValueError("TOPBRAIN_BENCHMARK_JSON is required (.env or --export-json).")
+
     target_size = tuple(args.target_size) if args.target_size else None
-    os.makedirs(GRAPHS_DIR, exist_ok=True)
+    export_dir = os.path.dirname(args.export_json)
+    if export_dir:
+        os.makedirs(export_dir, exist_ok=True)
+    elif GRAPHS_DIR:
+        os.makedirs(GRAPHS_DIR, exist_ok=True)
     _request_high_priority()
 
     print("\n" + "-" * 70)
@@ -676,7 +686,8 @@ def main() -> None:
     print(f"  Flush cache     : {'YES' if args.flush_cache else 'NO (may bias I/O)'}")
     if target_size:
         print(f"  Volume resize   : {target_size[0]}x{target_size[1]}x{target_size[2]}")
-    print(f"  Output dir      : {GRAPHS_DIR}/\n")
+    output_dir_label = export_dir if export_dir else (GRAPHS_DIR or ".")
+    print(f"  Output dir      : {output_dir_label}/\n")
 
     # --- Loader factories ---
     def file_loader_fn(nw=args.num_workers):
