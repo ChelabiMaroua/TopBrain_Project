@@ -35,7 +35,7 @@ def main():
     parser.add_argument("--seed", type=int, default=42, help="Seed pour la reproductibilité")
     
     # Sortie
-    parser.add_argument("--output", default="3_DATA_Partitionement/partition_materialized.json")
+    parser.add_argument("--output", default="3_Data_Partitionement/partition_materialized.json")
     
     args = parser.parse_args()
 
@@ -79,7 +79,7 @@ def main():
         val_ids = sorted(kfold_pool[start:end])
         train_ids = sorted([p for p in kfold_pool if p not in val_ids])
         
-        folds_data[f"fold_{i}"] = {
+        folds_data[f"fold_{i + 1}"] = {
             "train": train_ids,
             "val": val_ids,
             "train_count": len(train_ids),

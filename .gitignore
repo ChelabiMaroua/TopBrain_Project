@@ -19,6 +19,7 @@ logs/
 # Generated output
 Graphs/
 Reconstruction/
+results/terminal_result.txt
 
 # Local MongoDB runtime/storage artifacts
 .mongo-data/

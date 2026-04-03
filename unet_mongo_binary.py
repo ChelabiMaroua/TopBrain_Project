@@ -1,7 +1,9 @@
 import argparse
 import os
 import random
+import sys
 import time
+from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
 import nibabel as nib
@@ -9,10 +11,16 @@ import numpy as np
 import torch
 import torch.nn as nn
 from dotenv import load_dotenv
-from ETL.Transform.transform_t3_normalization import normalize_volume
 from pymongo import MongoClient
 from pymongo.errors import ServerSelectionTimeoutError
 from torch.utils.data import DataLoader, Dataset
+
+ROOT = Path(__file__).resolve().parent
+TRANSFORM_DIR = ROOT / "1_ETL" / "Transform"
+if TRANSFORM_DIR.exists() and str(TRANSFORM_DIR) not in sys.path:
+    sys.path.insert(0, str(TRANSFORM_DIR))
+
+from transform_t3_normalization import normalize_volume
 
 load_dotenv()
 
