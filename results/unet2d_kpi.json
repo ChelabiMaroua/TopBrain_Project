@@ -1,0 +1,51 @@
+{
+  "kpi2_throughput_patients_per_sec": {
+    "workers": [
+      0,
+      2,
+      4
+    ],
+    "DirectFiles": [
+      21.755560612750248,
+      0.29448465288792314,
+      0.2948663595775211
+    ],
+    "MongoBinary": [
+      348.19183976944,
+      0.5105835546244957,
+      0.3133179399812574
+    ],
+    "MongoPolygons": [
+      1.7117744922010059,
+      0.5435192965770235,
+      0.30542079270307754
+    ]
+  },
+  "kpi3_disk_occupancy_gb_for_100_patients": {
+    "DirectFiles": {
+      "image": 2.9645151970908046,
+      "mask": 0.015245811082422733,
+      "meta": 0.0
+    },
+    "MongoBinary": {
+      "image": 0.880935788154602,
+      "mask": 0.27015364170074463,
+      "meta": 0.023491621017456055
+    },
+    "MongoPolygons": {
+      "image": 0.0,
+      "mask": 0.004598575411364437,
+      "meta": 0.0024761559907346964
+    }
+  },
+  "kpi4_etl_overhead_seconds": {
+    "DirectFiles": 0.0,
+    "MongoBinary": 15.09,
+    "MongoPolygons": 15.09
+  },
+  "meta": {
+    "fold": "fold_1",
+    "num_patients": 20,
+    "target_size": "128x128x64"
+  }
+}

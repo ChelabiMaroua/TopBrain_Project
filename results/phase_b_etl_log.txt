@@ -1,0 +1,9 @@
+=== PHASE B | ETL 2D Population ===
+Mongo DB: TopBrain_DB
+Binary collection : MultiClassPatients2D_Binary
+Polygon collection: MultiClassPatients2D_Polygons
+Target size: (128, 128, 64)
+Patients processed : 25
+Binary docs inserted : 1600
+Polygon docs inserted: 1600
+Elapsed: 15.09s

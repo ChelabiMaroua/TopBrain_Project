@@ -1,0 +1,26 @@
+{
+  "fold": "fold_1",
+  "strategies": [
+    {
+      "strategy": "directfiles",
+      "best_combined": 0.2638059324347739,
+      "best_epoch": 148,
+      "train_slices": 1024,
+      "val_slices": 256
+    },
+    {
+      "strategy": "binary",
+      "best_combined": 0.17308035230813926,
+      "best_epoch": 141,
+      "train_slices": 1024,
+      "val_slices": 256
+    },
+    {
+      "strategy": "polygons",
+      "best_combined": 0.1719637939462554,
+      "best_epoch": 149,
+      "train_slices": 1024,
+      "val_slices": 256
+    }
+  ]
+}
