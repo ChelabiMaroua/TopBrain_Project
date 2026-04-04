@@ -49,6 +49,7 @@ python 4_Unet2D/train_unet2d_compare.py `
   --label-dir $Env:TOPBRAIN_LABEL_DIR `
   --partition-file 3_Data_Partitionement/partition_materialized.json `
   --fold fold_1 `
+  --epochs 300 `
   --augment `
   --num-workers 0
 ```
