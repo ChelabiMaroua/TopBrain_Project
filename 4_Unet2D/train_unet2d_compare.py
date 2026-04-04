@@ -360,6 +360,7 @@ def train_one_strategy(strategy: str, args, train_ids: List[str], val_ids: List[
 
     best = -1.0
     best_epoch = 0
+    epoch_history = []
 
     print(f"\n=== PHASE C | TRAIN 2D [{strategy}] ===")
     print(f"Device={device} train_slices={len(train_ds)} val_slices={len(val_ds)} augment={args.augment}")
@@ -378,6 +379,17 @@ def train_one_strategy(strategy: str, args, train_ids: List[str], val_ids: List[
             f"combined={metrics['combined_score']:.4f} | {elapsed:.1f}s"
         )
 
+        # Collect epoch metrics for history
+        epoch_history.append({
+            "epoch": int(epoch),
+            "train_loss": float(train_loss),
+            "val_loss": float(val_loss),
+            "dice_fg": float(metrics['mean_dice_fg']),
+            "iou_fg": float(metrics['mean_iou_fg']),
+            "combined_score": float(metrics['combined_score']),
+            "elapsed_sec": float(elapsed)
+        })
+
         if metrics["combined_score"] > best:
             best = metrics["combined_score"]
             best_epoch = epoch
@@ -390,6 +402,7 @@ def train_one_strategy(strategy: str, args, train_ids: List[str], val_ids: List[
         "best_epoch": int(best_epoch),
         "train_slices": int(len(train_ds)),
         "val_slices": int(len(val_ds)),
+        "epochs": epoch_history
     }
 
 
