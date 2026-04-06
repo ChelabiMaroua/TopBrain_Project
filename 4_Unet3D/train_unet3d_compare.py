@@ -6,7 +6,7 @@ import re
 import sys
 import time
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Tuple
 
 import cv2
 import nibabel as nib
@@ -15,7 +15,7 @@ import torch
 import torch.nn as nn
 from dotenv import load_dotenv
 from pymongo import MongoClient
-from torch.utils.data import DataLoader, Dataset, WeightedRandomSampler
+from torch.utils.data import DataLoader, Dataset
 
 ROOT = Path(__file__).resolve().parents[1]
 EXTRACT_DIR = ROOT / "1_ETL" / "Extract"
@@ -25,10 +25,12 @@ if str(EXTRACT_DIR) not in sys.path:
     sys.path.insert(0, str(EXTRACT_DIR))
 if str(TRANSFORM_DIR) not in sys.path:
     sys.path.insert(0, str(TRANSFORM_DIR))
-if str(Path(__file__).resolve().parent) not in sys.path:
-    sys.path.insert(0, str(Path(__file__).resolve().parent))
+if str(UNET3D_DIR) not in sys.path:
+    sys.path.insert(0, str(UNET3D_DIR))
 
-from model_unet2d import UNet2D
+from model_unet3d import UNet3D
+
+
 def _load_module(module_name: str, file_path: Path):
     spec = importlib.util.spec_from_file_location(module_name, file_path)
     if spec is None or spec.loader is None:
@@ -57,32 +59,6 @@ except Exception:
     DiceCELoss = None
 
 
-def apply_2d_augmentation(img2: np.ndarray, lbl2: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
-    """Light 2D augmentation applied on training samples only."""
-    if np.random.rand() < 0.5:
-        img2 = np.flip(img2, axis=0).copy()
-        lbl2 = np.flip(lbl2, axis=0).copy()
-    if np.random.rand() < 0.5:
-        img2 = np.flip(img2, axis=1).copy()
-        lbl2 = np.flip(lbl2, axis=1).copy()
-
-    if np.random.rand() < 0.5:
-        k = int(np.random.randint(0, 4))
-        if k > 0:
-            img2 = np.rot90(img2, k=k).copy()
-            lbl2 = np.rot90(lbl2, k=k).copy()
-
-    if np.random.rand() < 0.3:
-        noise = np.random.normal(0.0, 0.02, size=img2.shape).astype(np.float32)
-        img2 = np.clip(img2 + noise, 0.0, 1.0)
-
-    if np.random.rand() < 0.3:
-        gamma = float(np.random.uniform(0.8, 1.2))
-        img2 = np.clip(np.power(np.clip(img2, 1e-6, 1.0), gamma), 0.0, 1.0)
-
-    return img2.astype(np.float32, copy=False), lbl2.astype(np.int64, copy=False)
-
-
 def normalize_pid(value: object) -> str:
     text = str(value).strip()
     nums = re.findall(r"\d+", text)
@@ -97,7 +73,7 @@ def load_partition(partition_file: str, fold: str) -> Tuple[List[str], List[str]
     return p["folds"][fold]["train"], p["folds"][fold]["val"]
 
 
-class DirectFiles2DDataset(Dataset):
+class DirectFiles3DDataset(Dataset):
     def __init__(
         self,
         image_dir: str,
@@ -105,10 +81,8 @@ class DirectFiles2DDataset(Dataset):
         patient_ids: List[str],
         target_size: Tuple[int, int, int],
         num_classes: int,
-        augment: bool = False,
     ):
-        self.samples: List[Tuple[np.ndarray, np.ndarray, str]] = []
-        self.augment = augment
+        self.samples: List[Tuple[np.ndarray, np.ndarray]] = []
         items = list_patient_files(image_dir=image_dir, label_dir=label_dir)
         wanted = {normalize_pid(x) for x in patient_ids}
         items = [it for it in items if normalize_pid(it["patient_id"]) in wanted]
@@ -119,21 +93,17 @@ class DirectFiles2DDataset(Dataset):
             img, lbl = resize_pair(img=img, lbl=lbl, target_size=target_size)
             img = normalize_volume(img, window_min=-100.0, window_max=400.0).astype(np.float32)
             lbl = np.clip(lbl.astype(np.int64), 0, num_classes - 1)
-            pid = normalize_pid(it["patient_id"])
-            for z in range(img.shape[2]):
-                self.samples.append((img[:, :, z], lbl[:, :, z], pid))
+            self.samples.append((img, lbl))
 
     def __len__(self) -> int:
         return len(self.samples)
 
     def __getitem__(self, idx: int):
-        img2, lbl2, _pid = self.samples[idx]
-        if self.augment:
-            img2, lbl2 = apply_2d_augmentation(img2, lbl2)
-        return torch.from_numpy(img2[None, ...]).float(), torch.from_numpy(lbl2).long()
+        img, lbl = self.samples[idx]
+        return torch.from_numpy(img[None, ...]).float(), torch.from_numpy(lbl).long()
 
 
-class BinaryMongo2DDataset(Dataset):
+class BinaryMongo3DDataset(Dataset):
     def __init__(
         self,
         mongo_uri: str,
@@ -142,23 +112,14 @@ class BinaryMongo2DDataset(Dataset):
         target_size_key: str,
         patient_ids: List[str],
         num_classes: int,
-        augment: bool = False,
     ):
-        self.docs: List[Dict] = []
-        self.augment = augment
         wanted = {normalize_pid(x) for x in patient_ids}
         client = MongoClient(mongo_uri, serverSelectionTimeoutMS=5000)
         coll = client[db_name][collection]
-        cursor = coll.find(
-            {
-                "schema": "2d_binary",
-                "target_size": target_size_key,
-                "patient_norm_id": {"$in": sorted(wanted)},
-            },
-            {"_id": 0},
-        )
-        self.docs = list(cursor)
+        docs = list(coll.find({"target_size": target_size_key}, {"_id": 0}))
         client.close()
+
+        self.docs = [d for d in docs if normalize_pid(d.get("patient_id", "")) in wanted]
         self.num_classes = num_classes
 
     def __len__(self) -> int:
@@ -169,80 +130,69 @@ class BinaryMongo2DDataset(Dataset):
         shape = tuple(d["shape"])
         img = np.frombuffer(d["img_data"], dtype=np.dtype(d.get("img_dtype", "float32"))).reshape(shape).astype(np.float32, copy=True)
         lbl = np.frombuffer(d["lbl_data"], dtype=np.dtype(d.get("lbl_dtype", "int64"))).reshape(shape).astype(np.int64, copy=True)
+        img = normalize_volume(img, window_min=-100.0, window_max=400.0).astype(np.float32)
         lbl = np.clip(lbl, 0, self.num_classes - 1)
-        if self.augment:
-            img, lbl = apply_2d_augmentation(img, lbl)
         return torch.from_numpy(img[None, ...]).float(), torch.from_numpy(lbl).long()
 
 
-class PolygonMongo2DDataset(Dataset):
+class PolygonMongo3DDataset(Dataset):
     def __init__(
         self,
         mongo_uri: str,
         db_name: str,
         collection: str,
-        target_size_key: str,
         patient_ids: List[str],
+        target_size: Tuple[int, int, int],
         num_classes: int,
-        augment: bool = False,
     ):
         wanted = {normalize_pid(x) for x in patient_ids}
         client = MongoClient(mongo_uri, serverSelectionTimeoutMS=5000)
         coll = client[db_name][collection]
-        cursor = coll.find(
-            {
-                "schema": "2d_polygon",
-                "target_size": target_size_key,
-                "patient_norm_id": {"$in": sorted(wanted)},
-            },
-            {"_id": 0},
-        )
-        self.docs = list(cursor)
+        docs = list(coll.find({}, {"_id": 0}))
         client.close()
 
-        self.image_cache: Dict[str, np.ndarray] = {}
+        self.docs = [d for d in docs if normalize_pid(d.get("patient_id", "")) in wanted]
+        self.target_size = target_size
         self.num_classes = num_classes
-        self.augment = augment
 
     def __len__(self) -> int:
         return len(self.docs)
 
-    def _load_patient_img_volume(self, img_path: str, target_size_key: str) -> np.ndarray:
-        cache_key = f"{img_path}|{target_size_key}"
-        if cache_key in self.image_cache:
-            return self.image_cache[cache_key]
-
-        parts = target_size_key.split("x")
-        target_size = (int(parts[0]), int(parts[1]), int(parts[2]))
-        img = nib.load(img_path).get_fdata().astype(np.float32)
-        dummy_lbl = np.zeros_like(img, dtype=np.int16)
-        img, _ = resize_pair(img=img, lbl=dummy_lbl, target_size=target_size)
-        img = normalize_volume(img, window_min=-100.0, window_max=400.0).astype(np.float32)
-        self.image_cache[cache_key] = img
-        return img
-
     def __getitem__(self, idx: int):
         d = self.docs[idx]
-        h, w = int(d["shape"][0]), int(d["shape"][1])
-        z = int(d["slice_idx"])
-        img_vol = self._load_patient_img_volume(d["img_path"], d["target_size"])
-        img2 = img_vol[:, :, z]
+        md = d.get("metadata", {})
+        img_path = md.get("img_path", "")
+        if not img_path or not os.path.exists(img_path):
+            raise FileNotFoundError(f"Polygon image path not found: {img_path}")
 
-        lbl2 = np.zeros((h, w), dtype=np.uint8)
+        img = nib.load(img_path).get_fdata().astype(np.float32)
+        dims = md.get("dimensions", {})
+        h = int(dims.get("height", img.shape[0]))
+        w = int(dims.get("width", img.shape[1]))
+        depth = int(dims.get("depth", img.shape[2]))
+
+        lbl = np.zeros((h, w, depth), dtype=np.uint8)
         for seg in d.get("segments", []):
-            label_id = int(seg.get("label_id", 0))
-            if label_id < 0 or label_id >= self.num_classes:
+            cls = int(seg.get("label_id", 0))
+            if cls < 0 or cls >= self.num_classes:
                 continue
-            for contour in seg.get("contours", []):
-                pts = np.array(contour, dtype=np.int32).reshape(-1, 2)
-                if pts.size == 0:
+            for poly in seg.get("polygons", []):
+                z_idx = poly.get("z_index")
+                if z_idx is None or z_idx < 0 or z_idx >= depth:
                     continue
-                cv2.fillPoly(lbl2, [pts], int(label_id))
+                mask = np.zeros((h, w), dtype=np.uint8)
+                for contour in poly.get("contours", []):
+                    pts = np.array(contour, dtype=np.int32).reshape(-1, 2)
+                    if pts.size == 0:
+                        continue
+                    cv2.fillPoly(mask, [pts], 1)
+                lbl[:, :, int(z_idx)] = np.where(mask > 0, cls, lbl[:, :, int(z_idx)])
 
-        if self.augment:
-            img2, lbl2 = apply_2d_augmentation(img2, lbl2)
+        img, lbl = resize_pair(img=img, lbl=lbl, target_size=self.target_size)
+        img = normalize_volume(img, window_min=-100.0, window_max=400.0).astype(np.float32)
+        lbl = np.clip(lbl.astype(np.int64), 0, self.num_classes - 1)
 
-        return torch.from_numpy(img2[None, ...]).float(), torch.from_numpy(lbl2.astype(np.int64)).long()
+        return torch.from_numpy(img[None, ...]).float(), torch.from_numpy(lbl).long()
 
 
 def class_weights_from_dataset(dataset: Dataset, num_classes: int) -> torch.Tensor:
@@ -263,29 +213,6 @@ def make_criterion(weights: torch.Tensor):
     if DiceCELoss is not None:
         return DiceCELoss(to_onehot_y=True, softmax=True, lambda_dice=0.5, lambda_ce=0.5, weight=weights)
     return nn.CrossEntropyLoss(weight=weights)
-
-
-def build_foreground_sampler(dataset: Dataset, boost: float) -> WeightedRandomSampler:
-    weights: List[float] = []
-    fg_count = 0
-    for i in range(len(dataset)):
-        _, y = dataset[i]
-        has_fg = bool((y > 0).any().item())
-        if has_fg:
-            fg_count += 1
-        weights.append(float(boost) if has_fg else 1.0)
-
-    bg_only_count = len(weights) - fg_count
-    print(
-        f"[sampler] foreground slices={fg_count} | background-only slices={bg_only_count} | "
-        f"foreground_boost={boost:.2f}"
-    )
-
-    return WeightedRandomSampler(
-        weights=torch.tensor(weights, dtype=torch.double),
-        num_samples=len(weights),
-        replacement=True,
-    )
 
 
 def run_epoch(model, loader, criterion, optimizer, device):
@@ -333,33 +260,30 @@ def eval_metrics(model, loader, num_classes, device):
 
 def build_dataset(strategy: str, args, patient_ids: List[str], target_size_key: str):
     if strategy == "directfiles":
-        return DirectFiles2DDataset(
+        return DirectFiles3DDataset(
             image_dir=detect_existing_dir(args.image_dir),
             label_dir=detect_existing_dir(args.label_dir),
             patient_ids=patient_ids,
             target_size=tuple(args.target_size),
             num_classes=args.num_classes,
-            augment=args.augment,
         )
     if strategy == "binary":
-        return BinaryMongo2DDataset(
+        return BinaryMongo3DDataset(
             mongo_uri=args.mongo_uri,
             db_name=args.db_name,
             collection=args.binary_collection,
             target_size_key=target_size_key,
             patient_ids=patient_ids,
             num_classes=args.num_classes,
-            augment=args.augment,
         )
     if strategy == "polygons":
-        return PolygonMongo2DDataset(
+        return PolygonMongo3DDataset(
             mongo_uri=args.mongo_uri,
             db_name=args.db_name,
             collection=args.polygon_collection,
-            target_size_key=target_size_key,
             patient_ids=patient_ids,
+            target_size=tuple(args.target_size),
             num_classes=args.num_classes,
-            augment=args.augment,
         )
     raise ValueError(f"Unknown strategy: {strategy}")
 
@@ -369,27 +293,15 @@ def train_one_strategy(strategy: str, args, train_ids: List[str], val_ids: List[
     target_size_key = f"{args.target_size[0]}x{args.target_size[1]}x{args.target_size[2]}"
 
     train_ds = build_dataset(strategy, args, train_ids, target_size_key)
-    val_args = argparse.Namespace(**vars(args))
-    val_args.augment = False
-    val_ds = build_dataset(strategy, val_args, val_ids, target_size_key)
+    val_ds = build_dataset(strategy, args, val_ids, target_size_key)
 
     if len(train_ds) == 0 or len(val_ds) == 0:
         raise RuntimeError(f"Empty dataset for strategy={strategy}")
 
-    sampler = None
-    if args.foreground_sampling:
-        sampler = build_foreground_sampler(train_ds, boost=args.foreground_boost)
-
-    train_loader = DataLoader(
-        train_ds,
-        batch_size=args.batch_size,
-        shuffle=sampler is None,
-        sampler=sampler,
-        num_workers=args.num_workers,
-    )
+    train_loader = DataLoader(train_ds, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers)
     val_loader = DataLoader(val_ds, batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers)
 
-    model = UNet2D(in_channels=1, num_classes=args.num_classes, base_channels=args.base_channels).to(device)
+    model = UNet3D(in_channels=1, num_classes=args.num_classes, base_channels=args.base_channels).to(device)
     weights = class_weights_from_dataset(train_ds, args.num_classes).to(device)
     criterion = make_criterion(weights)
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
@@ -404,8 +316,8 @@ def train_one_strategy(strategy: str, args, train_ids: List[str], val_ids: List[
     no_improve = 0
     epoch_history = []
 
-    print(f"\n=== PHASE C | TRAIN 2D [{strategy}] ===")
-    print(f"Device={device} train_slices={len(train_ds)} val_slices={len(val_ds)} augment={args.augment}")
+    print(f"\n=== TRAIN 3D [{strategy}] ===")
+    print(f"Device={device} train_volumes={len(train_ds)} val_volumes={len(val_ds)}")
 
     for epoch in range(1, args.epochs + 1):
         t0 = time.perf_counter()
@@ -423,14 +335,13 @@ def train_one_strategy(strategy: str, args, train_ids: List[str], val_ids: List[
             f"combined={metrics['combined_score']:.4f} | lr={lr:.2e} | {elapsed:.1f}s"
         )
 
-        # Collect epoch metrics for history
         epoch_history.append({
             "epoch": int(epoch),
             "train_loss": float(train_loss),
             "val_loss": float(val_loss),
-            "dice_fg": float(metrics['mean_dice_fg']),
-            "iou_fg": float(metrics['mean_iou_fg']),
-            "combined_score": float(metrics['combined_score']),
+            "dice_fg": float(metrics["mean_dice_fg"]),
+            "iou_fg": float(metrics["mean_iou_fg"]),
+            "combined_score": float(metrics["combined_score"]),
             "lr": lr,
             "per_class": {
                 f"dice_class_{c}": float(metrics.get(f"dice_class_{c}", 0.0))
@@ -440,14 +351,14 @@ def train_one_strategy(strategy: str, args, train_ids: List[str], val_ids: List[
                 f"iou_class_{c}": float(metrics.get(f"iou_class_{c}", 0.0))
                 for c in range(args.num_classes)
             },
-            "elapsed_sec": float(elapsed)
+            "elapsed_sec": float(elapsed),
         })
 
         if metrics["combined_score"] > best:
             best = metrics["combined_score"]
             best_epoch = epoch
             no_improve = 0
-            ckpt = save_dir / f"unet2d_best_{strategy}_{args.fold}.pth"
+            ckpt = save_dir / f"unet3d_best_{strategy}_{args.fold}.pth"
             torch.save(
                 {
                     "epoch": epoch,
@@ -473,14 +384,14 @@ def train_one_strategy(strategy: str, args, train_ids: List[str], val_ids: List[
         "strategy": strategy,
         "best_combined": float(best),
         "best_epoch": int(best_epoch),
-        "train_slices": int(len(train_ds)),
-        "val_slices": int(len(val_ds)),
-        "epochs": epoch_history
+        "train_volumes": int(len(train_ds)),
+        "val_volumes": int(len(val_ds)),
+        "epochs": epoch_history,
     }
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="UNet2D comparative trainer (DirectFiles vs Binary vs Polygons)")
+    parser = argparse.ArgumentParser(description="UNet3D comparative trainer (DirectFiles vs Binary vs Polygons)")
     parser.add_argument("--strategy", default="all", choices=["all", "directfiles", "binary", "polygons"])
     parser.add_argument("--image-dir", default=os.getenv("TOPBRAIN_IMAGE_DIR", ""))
     parser.add_argument("--label-dir", default=os.getenv("TOPBRAIN_LABEL_DIR", ""))
@@ -488,27 +399,20 @@ def main() -> None:
     parser.add_argument("--fold", default="fold_1")
     parser.add_argument("--mongo-uri", default=os.getenv("MONGO_URI", "mongodb://localhost:27017"))
     parser.add_argument("--db-name", default=os.getenv("MONGO_DB_NAME", "TopBrain_DB"))
-    parser.add_argument("--binary-collection", default=os.getenv("TOPBRAIN_2D_BINARY_COLLECTION", "MultiClassPatients2D_Binary"))
-    parser.add_argument("--polygon-collection", default=os.getenv("TOPBRAIN_2D_POLYGON_COLLECTION", "MultiClassPatients2D_Polygons"))
+    parser.add_argument("--binary-collection", default=os.getenv("MONGO_BINARY_COLLECTION", "MultiClassPatients"))
+    parser.add_argument("--polygon-collection", default=os.getenv("TOPBRAIN_3D_POLYGON_COLLECTION", "PolygonPatients"))
     parser.add_argument("--target-size", nargs=3, type=int, default=[128, 128, 64])
-    parser.add_argument("--epochs", type=int, default=int(os.getenv("TOPBRAIN_2D_EPOCHS", "150")))
-    parser.add_argument("--batch-size", type=int, default=8)
+    parser.add_argument("--epochs", type=int, default=int(os.getenv("TOPBRAIN_3D_EPOCHS", "150")))
+    parser.add_argument("--batch-size", type=int, default=1)
     parser.add_argument("--num-workers", type=int, default=0)
     parser.add_argument("--num-classes", type=int, default=6)
     parser.add_argument("--base-channels", type=int, default=32)
     parser.add_argument("--lr", type=float, default=1e-4)
     parser.add_argument("--eta-min-lr", type=float, default=1e-6)
-    parser.add_argument("--augment", dest="augment", action="store_true")
-    parser.add_argument("--no-augment", dest="augment", action="store_false")
-    parser.set_defaults(augment=True)
-    parser.add_argument("--foreground-sampling", dest="foreground_sampling", action="store_true")
-    parser.add_argument("--no-foreground-sampling", dest="foreground_sampling", action="store_false")
-    parser.set_defaults(foreground_sampling=True)
-    parser.add_argument("--foreground-boost", type=float, default=3.0)
-    parser.add_argument("--early-stopping", type=int, default=30)
+    parser.add_argument("--early-stopping", type=int, default=20)
     parser.add_argument("--min-epochs", type=int, default=40)
-    parser.add_argument("--save-dir", default=os.getenv("TOPBRAIN_2D_CHECKPOINT_DIR", "4_Unet2D/checkpoints"))
-    parser.add_argument("--output-json", default=os.getenv("TOPBRAIN_2D_TRAIN_RESULTS_JSON", "results/unet2d_train_results.json"))
+    parser.add_argument("--save-dir", default=os.getenv("TOPBRAIN_3D_CHECKPOINT_DIR", "4_Unet3D/checkpoints"))
+    parser.add_argument("--output-json", default=os.getenv("TOPBRAIN_3D_TRAIN_RESULTS_JSON", "results/unet3d_train_results.json"))
     args = parser.parse_args()
 
     if not args.partition_file:
@@ -529,7 +433,7 @@ def main() -> None:
     with out_path.open("w", encoding="utf-8") as f:
         json.dump({"fold": args.fold, "strategies": results}, f, indent=2, ensure_ascii=False)
 
-    print("\n=== PHASE C | SUMMARY ===")
+    print("\n=== SUMMARY (3D compare) ===")
     for r in results:
         print(f"{r['strategy']:<12} best_combined={r['best_combined']:.4f} epoch={r['best_epoch']}")
     print(f"Saved: {out_path}")
