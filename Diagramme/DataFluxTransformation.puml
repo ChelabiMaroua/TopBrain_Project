@@ -1,25 +1,35 @@
 @startuml
+left to right direction
+
 skinparam rectangle {
   RoundCorner 15
   BackgroundColor<<T1>> LightBlue
   BackgroundColor<<T2>> LightGreen
-  BackgroundColor<<T3>> Orange
-  BackgroundColor<<T4>> Violet
+  BackgroundColor<<B>> Orange
+  BackgroundColor<<P>> Wheat
 }
 
 rectangle "\nChargement et cast type" <<T1>> as T1
 rectangle "\nRedimension\nscipy.ndimage.zoom" <<T2>> as T2
-rectangle "\nNormalisation\nNumPy" <<T3>> as T3
-rectangle "\nSérialisation\nPython .tobytes()" <<T4>> as T4
+rectangle "\nBranche binaire\nNormalisation + sérialisation" <<B>> as TB
+rectangle "\nBranche polygones\nExtraction 2D + contours" <<P>> as TP
 
-' Flux principal
-T1 -right-> T2 : "ndarray float32/int64"
-T2 -down-> T3 : "ndarray 128×128×64"
-T3 -left-> T4 : "ndarray normalisé [0,1]"
+' Flux commun
+T1 --> T2 : Entrée NIfTI
 
-' Flèche entrante vers T1
-"NIFTI           "--> T1 : Entrée
+' Branche binaire séparée
+T2 --> TB : volume binaire
+TB --> BytesB : Sortie binaire
 
-' Flèche sortante de T4
-T4 --> Bytes : Sortie
+' Branche polygones séparée
+T2 --> TP : volume source pour 2D
+TP --> BytesP : Sortie polygones
+
+note bottom of TB
+Chemin conservé pour DirectFiles et MongoBinary.
+end note
+
+note bottom of TP
+Chemin distinct pour la génération des segments polygones.
+end note
 @enduml

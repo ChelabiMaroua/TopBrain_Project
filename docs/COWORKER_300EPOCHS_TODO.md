@@ -45,6 +45,14 @@ cd C:\Users\LENOVO\Desktop\PFFECerine\TopBrain_Project
   -RunEtl2D
 ```
 
+## Optional: DB-only 2D run (skip DirectFiles)
+
+If DB is already populated by ETL, run 2D with Mongo-backed strategy only:
+
+```powershell
+python 4_Unet2D/train_unet2d_compare.py --strategy binary --fold fold_1 --epochs 500 --batch-size 8 --num-workers 4
+```
+
 This script now contains all commands explicitly:
 
 1. Optional ETL 2D population (`1_ETL/Load/load_t6_mongodb_insert_2d.py`)
