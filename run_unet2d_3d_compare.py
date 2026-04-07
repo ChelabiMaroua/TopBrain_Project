@@ -26,6 +26,14 @@ def main() -> None:
     parser.add_argument("--batch-size-2d", type=int, default=8)
     parser.add_argument("--batch-size-3d", type=int, default=1)
     parser.add_argument("--num-workers", type=int, default=0)
+    parser.add_argument("--sampling-mode-2d", choices=["none", "foreground", "class-aware"], default="class-aware")
+    parser.add_argument("--sampling-mode-3d", choices=["none", "foreground", "class-aware"], default="class-aware")
+    parser.add_argument("--foreground-boost-2d", type=float, default=2.5)
+    parser.add_argument("--foreground-boost-3d", type=float, default=2.0)
+    parser.add_argument("--class-boosts-2d", default="3:5.0,5:7.0,4:2.0")
+    parser.add_argument("--class-boosts-3d", default="3:5.0,5:7.0,4:2.0")
+    parser.add_argument("--max-sample-weight-2d", type=float, default=14.0)
+    parser.add_argument("--max-sample-weight-3d", type=float, default=12.0)
     parser.add_argument("--skip-2d", action="store_true")
     parser.add_argument("--skip-3d", action="store_true")
     args = parser.parse_args()
@@ -48,7 +56,14 @@ def main() -> None:
                 "--num-workers",
                 str(args.num_workers),
                 "--augment",
-                "--foreground-sampling",
+                "--sampling-mode",
+                args.sampling_mode_2d,
+                "--foreground-boost",
+                str(args.foreground_boost_2d),
+                "--class-boosts",
+                args.class_boosts_2d,
+                "--max-sample-weight",
+                str(args.max_sample_weight_2d),
             ]
         )
 
@@ -67,6 +82,14 @@ def main() -> None:
                 str(args.batch_size_3d),
                 "--num-workers",
                 str(args.num_workers),
+                "--sampling-mode",
+                args.sampling_mode_3d,
+                "--foreground-boost",
+                str(args.foreground_boost_3d),
+                "--class-boosts",
+                args.class_boosts_3d,
+                "--max-sample-weight",
+                str(args.max_sample_weight_3d),
             ]
         )
 

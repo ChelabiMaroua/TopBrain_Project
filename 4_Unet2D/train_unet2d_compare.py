@@ -265,6 +265,26 @@ def make_criterion(weights: torch.Tensor):
     return nn.CrossEntropyLoss(weight=weights)
 
 
+def parse_class_boosts(text: str, num_classes: int) -> Dict[int, float]:
+    boosts: Dict[int, float] = {}
+    raw = (text or "").strip()
+    if not raw:
+        return boosts
+    parts = [p.strip() for p in raw.split(",") if p.strip()]
+    for part in parts:
+        if ":" not in part:
+            raise ValueError(f"Invalid class boost format: '{part}'. Expected 'class_id:boost'.")
+        cls_str, boost_str = [x.strip() for x in part.split(":", 1)]
+        cls = int(cls_str)
+        boost = float(boost_str)
+        if cls <= 0 or cls >= num_classes:
+            raise ValueError(f"Class id {cls} out of range. Must be in [1, {num_classes - 1}].")
+        if boost <= 0.0:
+            raise ValueError(f"Boost for class {cls} must be > 0.")
+        boosts[cls] = boost
+    return boosts
+
+
 def build_foreground_sampler(dataset: Dataset, boost: float) -> WeightedRandomSampler:
     weights: List[float] = []
     fg_count = 0
@@ -280,6 +300,51 @@ def build_foreground_sampler(dataset: Dataset, boost: float) -> WeightedRandomSa
         f"[sampler] foreground slices={fg_count} | background-only slices={bg_only_count} | "
         f"foreground_boost={boost:.2f}"
     )
+
+    return WeightedRandomSampler(
+        weights=torch.tensor(weights, dtype=torch.double),
+        num_samples=len(weights),
+        replacement=True,
+    )
+
+
+def build_class_aware_sampler(
+    dataset: Dataset,
+    num_classes: int,
+    foreground_boost: float,
+    class_boosts: Dict[int, float],
+    max_sample_weight: float,
+) -> WeightedRandomSampler:
+    weights: List[float] = []
+    class_presence = {c: 0 for c in range(1, num_classes)}
+    fg_count = 0
+
+    for i in range(len(dataset)):
+        _, y = dataset[i]
+        arr = y.numpy()
+        present = np.unique(arr)
+        present = [int(c) for c in present.tolist() if int(c) > 0]
+
+        w = 1.0
+        if present:
+            fg_count += 1
+            w *= float(foreground_boost)
+            for c in present:
+                class_presence[c] += 1
+            # Boost by hardest class present in this slice.
+            hardest_boost = max([class_boosts.get(c, 1.0) for c in present] + [1.0])
+            w *= float(hardest_boost)
+
+        w = min(float(max_sample_weight), max(1.0, float(w)))
+        weights.append(w)
+
+    bg_only_count = len(weights) - fg_count
+    stats = " ".join([f"c{c}:{class_presence[c]}" for c in range(1, num_classes)])
+    print(
+        f"[sampler] mode=class-aware | fg={fg_count} bg_only={bg_only_count} | "
+        f"foreground_boost={foreground_boost:.2f} | class_boosts={class_boosts} | max_w={max_sample_weight:.1f}"
+    )
+    print(f"[sampler] class slice presence -> {stats}")
 
     return WeightedRandomSampler(
         weights=torch.tensor(weights, dtype=torch.double),
@@ -377,8 +442,17 @@ def train_one_strategy(strategy: str, args, train_ids: List[str], val_ids: List[
         raise RuntimeError(f"Empty dataset for strategy={strategy}")
 
     sampler = None
-    if args.foreground_sampling:
+    if args.sampling_mode == "foreground":
         sampler = build_foreground_sampler(train_ds, boost=args.foreground_boost)
+    elif args.sampling_mode == "class-aware":
+        class_boosts = parse_class_boosts(args.class_boosts, args.num_classes)
+        sampler = build_class_aware_sampler(
+            dataset=train_ds,
+            num_classes=args.num_classes,
+            foreground_boost=args.foreground_boost,
+            class_boosts=class_boosts,
+            max_sample_weight=args.max_sample_weight,
+        )
 
     train_loader = DataLoader(
         train_ds,
@@ -501,10 +575,20 @@ def main() -> None:
     parser.add_argument("--augment", dest="augment", action="store_true")
     parser.add_argument("--no-augment", dest="augment", action="store_false")
     parser.set_defaults(augment=True)
-    parser.add_argument("--foreground-sampling", dest="foreground_sampling", action="store_true")
-    parser.add_argument("--no-foreground-sampling", dest="foreground_sampling", action="store_false")
-    parser.set_defaults(foreground_sampling=True)
+    parser.add_argument(
+        "--sampling-mode",
+        choices=["none", "foreground", "class-aware"],
+        default="class-aware",
+        help="Sampling strategy for training slices.",
+    )
     parser.add_argument("--foreground-boost", type=float, default=3.0)
+    parser.add_argument(
+        "--class-boosts",
+        type=str,
+        default="3:4.0,5:6.0",
+        help="Comma-separated boosts, e.g. '3:4.0,5:6.0'.",
+    )
+    parser.add_argument("--max-sample-weight", type=float, default=12.0)
     parser.add_argument("--early-stopping", type=int, default=30)
     parser.add_argument("--min-epochs", type=int, default=40)
     parser.add_argument("--save-dir", default=os.getenv("TOPBRAIN_2D_CHECKPOINT_DIR", "4_Unet2D/checkpoints"))

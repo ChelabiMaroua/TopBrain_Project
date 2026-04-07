@@ -15,7 +15,7 @@ import torch
 import torch.nn as nn
 from dotenv import load_dotenv
 from pymongo import MongoClient
-from torch.utils.data import DataLoader, Dataset
+from torch.utils.data import DataLoader, Dataset, WeightedRandomSampler
 
 ROOT = Path(__file__).resolve().parents[1]
 EXTRACT_DIR = ROOT / "1_ETL" / "Extract"
@@ -215,6 +215,93 @@ def make_criterion(weights: torch.Tensor):
     return nn.CrossEntropyLoss(weight=weights)
 
 
+def parse_class_boosts(text: str, num_classes: int) -> Dict[int, float]:
+    boosts: Dict[int, float] = {}
+    raw = (text or "").strip()
+    if not raw:
+        return boosts
+    parts = [p.strip() for p in raw.split(",") if p.strip()]
+    for part in parts:
+        if ":" not in part:
+            raise ValueError(f"Invalid class boost format: '{part}'. Expected 'class_id:boost'.")
+        cls_str, boost_str = [x.strip() for x in part.split(":", 1)]
+        cls = int(cls_str)
+        boost = float(boost_str)
+        if cls <= 0 or cls >= num_classes:
+            raise ValueError(f"Class id {cls} out of range. Must be in [1, {num_classes - 1}].")
+        if boost <= 0.0:
+            raise ValueError(f"Boost for class {cls} must be > 0.")
+        boosts[cls] = boost
+    return boosts
+
+
+def build_foreground_sampler(dataset: Dataset, boost: float) -> WeightedRandomSampler:
+    weights: List[float] = []
+    fg_count = 0
+    for i in range(len(dataset)):
+        _, y = dataset[i]
+        has_fg = bool((y > 0).any().item())
+        if has_fg:
+            fg_count += 1
+        weights.append(float(boost) if has_fg else 1.0)
+
+    bg_only_count = len(weights) - fg_count
+    print(
+        f"[sampler] mode=foreground | fg_volumes={fg_count} bg_only_volumes={bg_only_count} | "
+        f"foreground_boost={boost:.2f}"
+    )
+
+    return WeightedRandomSampler(
+        weights=torch.tensor(weights, dtype=torch.double),
+        num_samples=len(weights),
+        replacement=True,
+    )
+
+
+def build_class_aware_sampler(
+    dataset: Dataset,
+    num_classes: int,
+    foreground_boost: float,
+    class_boosts: Dict[int, float],
+    max_sample_weight: float,
+) -> WeightedRandomSampler:
+    weights: List[float] = []
+    class_presence = {c: 0 for c in range(1, num_classes)}
+    fg_count = 0
+
+    for i in range(len(dataset)):
+        _, y = dataset[i]
+        arr = y.numpy()
+        present = np.unique(arr)
+        present = [int(c) for c in present.tolist() if int(c) > 0]
+
+        w = 1.0
+        if present:
+            fg_count += 1
+            w *= float(foreground_boost)
+            for c in present:
+                class_presence[c] += 1
+            hardest_boost = max([class_boosts.get(c, 1.0) for c in present] + [1.0])
+            w *= float(hardest_boost)
+
+        w = min(float(max_sample_weight), max(1.0, float(w)))
+        weights.append(w)
+
+    bg_only_count = len(weights) - fg_count
+    stats = " ".join([f"c{c}:{class_presence[c]}" for c in range(1, num_classes)])
+    print(
+        f"[sampler] mode=class-aware | fg_volumes={fg_count} bg_only_volumes={bg_only_count} | "
+        f"foreground_boost={foreground_boost:.2f} | class_boosts={class_boosts} | max_w={max_sample_weight:.1f}"
+    )
+    print(f"[sampler] class volume presence -> {stats}")
+
+    return WeightedRandomSampler(
+        weights=torch.tensor(weights, dtype=torch.double),
+        num_samples=len(weights),
+        replacement=True,
+    )
+
+
 def run_epoch(model, loader, criterion, optimizer, device):
     train_mode = optimizer is not None
     model.train(train_mode)
@@ -298,7 +385,26 @@ def train_one_strategy(strategy: str, args, train_ids: List[str], val_ids: List[
     if len(train_ds) == 0 or len(val_ds) == 0:
         raise RuntimeError(f"Empty dataset for strategy={strategy}")
 
-    train_loader = DataLoader(train_ds, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers)
+    sampler = None
+    if args.sampling_mode == "foreground":
+        sampler = build_foreground_sampler(train_ds, boost=args.foreground_boost)
+    elif args.sampling_mode == "class-aware":
+        class_boosts = parse_class_boosts(args.class_boosts, args.num_classes)
+        sampler = build_class_aware_sampler(
+            dataset=train_ds,
+            num_classes=args.num_classes,
+            foreground_boost=args.foreground_boost,
+            class_boosts=class_boosts,
+            max_sample_weight=args.max_sample_weight,
+        )
+
+    train_loader = DataLoader(
+        train_ds,
+        batch_size=args.batch_size,
+        shuffle=sampler is None,
+        sampler=sampler,
+        num_workers=args.num_workers,
+    )
     val_loader = DataLoader(val_ds, batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers)
 
     model = UNet3D(in_channels=1, num_classes=args.num_classes, base_channels=args.base_channels).to(device)
@@ -409,6 +515,20 @@ def main() -> None:
     parser.add_argument("--base-channels", type=int, default=32)
     parser.add_argument("--lr", type=float, default=1e-4)
     parser.add_argument("--eta-min-lr", type=float, default=1e-6)
+    parser.add_argument(
+        "--sampling-mode",
+        choices=["none", "foreground", "class-aware"],
+        default="class-aware",
+        help="Sampling strategy for training volumes.",
+    )
+    parser.add_argument("--foreground-boost", type=float, default=2.0)
+    parser.add_argument(
+        "--class-boosts",
+        type=str,
+        default="3:5.0,5:7.0",
+        help="Comma-separated boosts, e.g. '3:5.0,5:7.0'.",
+    )
+    parser.add_argument("--max-sample-weight", type=float, default=12.0)
     parser.add_argument("--early-stopping", type=int, default=20)
     parser.add_argument("--min-epochs", type=int, default=40)
     parser.add_argument("--save-dir", default=os.getenv("TOPBRAIN_3D_CHECKPOINT_DIR", "4_Unet3D/checkpoints"))

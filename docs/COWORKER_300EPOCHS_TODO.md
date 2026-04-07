@@ -41,13 +41,63 @@ cd C:\Users\LENOVO\Desktop\PFFECerine\TopBrain_Project
   -BatchSize2D 8 `
   -BatchSize3D 1 `
   -NumWorkers 4 `
-  -GpuId "0"
+  -GpuId "0" `
+  -RunEtl2D
 ```
+
+This script now contains all commands explicitly:
+
+1. Optional ETL 2D population (`1_ETL/Load/load_t6_mongodb_insert_2d.py`)
+2. UNet2D train with 3 strategies for 500 epochs
+3. UNet3D train with 3 strategies for 500 epochs
+4. Final 2D vs 3D comparison report generation
+
+It also writes step logs and marker files:
+
+- Logs: `results/run_logs/`
+- Resume markers: `results/run_markers/`
+
+## Resume after interruption (important)
+
+If machine stops in the middle, rerun with `-Resume`.
+Completed steps are skipped automatically.
+
+```powershell
+./run_compare_500epochs_gpu.ps1 `
+  -PythonExe "python" `
+  -Fold "fold_1" `
+  -BatchSize2D 8 `
+  -BatchSize3D 1 `
+  -NumWorkers 4 `
+  -GpuId "0" `
+  -Resume
+```
+
+If needed, run only missing part:
+
+```powershell
+# Skip 2D, rerun 3D + compare
+./run_compare_500epochs_gpu.ps1 -Skip2D -Resume
+
+# Skip both training blocks, regenerate only comparison file
+./run_compare_500epochs_gpu.ps1 -Skip2D -Skip3D
+```
+
+## Prevent 40-minute stop (Windows power)
+
+Before long training, keep laptop plugged in and disable sleep on AC:
+
+```powershell
+powercfg -change -standby-timeout-ac 0
+powercfg -change -hibernate-timeout-ac 0
+```
+
+After experiment, you can restore your preferred values.
 
 ## Equivalent one-liner (without .ps1)
 
 ```powershell
-$env:CUDA_VISIBLE_DEVICES="0"; python run_unet2d_3d_compare.py --fold fold_1 --epochs-2d 500 --epochs-3d 500 --batch-size-2d 8 --batch-size-3d 1 --num-workers 4
+$env:CUDA_VISIBLE_DEVICES="0"; python run_unet2d_3d_compare.py --fold fold_1 --epochs-2d 500 --epochs-3d 500 --batch-size-2d 8 --batch-size-3d 1 --num-workers 4 --sampling-mode-2d class-aware --sampling-mode-3d class-aware --foreground-boost-2d 2.5 --foreground-boost-3d 2.0 --class-boosts-2d "3:5.0,5:7.0,4:2.0" --class-boosts-3d "3:5.0,5:7.0,4:2.0" --max-sample-weight-2d 14 --max-sample-weight-3d 12
 ```
 
 ## Expected outputs
