@@ -97,6 +97,22 @@ def load_partition(partition_file: str, fold: str) -> Tuple[List[str], List[str]
     return p["folds"][fold]["train"], p["folds"][fold]["val"]
 
 
+def load_fold_names(partition_file: str, num_folds: int = 0) -> List[str]:
+    with open(partition_file, "r", encoding="utf-8") as f:
+        p = json.load(f)
+    folds = p.get("folds", {})
+    if not isinstance(folds, dict) or not folds:
+        raise KeyError(f"No folds found in {partition_file}")
+
+    names = sorted(
+        folds.keys(),
+        key=lambda x: int(x.split("_")[-1]) if x.startswith("fold_") and x.split("_")[-1].isdigit() else x,
+    )
+    if num_folds and num_folds > 0:
+        names = names[:num_folds]
+    return names
+
+
 class DirectFiles2DDataset(Dataset):
     def __init__(
         self,
@@ -560,6 +576,17 @@ def main() -> None:
     parser.add_argument("--label-dir", default=os.getenv("TOPBRAIN_LABEL_DIR", ""))
     parser.add_argument("--partition-file", default=os.getenv("TOPBRAIN_PARTITION_FILE", ""))
     parser.add_argument("--fold", default="fold_1")
+    parser.add_argument(
+        "--all-folds",
+        action="store_true",
+        help="Run all folds from partition file in one execution.",
+    )
+    parser.add_argument(
+        "--num-folds",
+        type=int,
+        default=0,
+        help="If > 0, run only the first N folds (used with --all-folds).",
+    )
     parser.add_argument("--mongo-uri", default=os.getenv("MONGO_URI", "mongodb://localhost:27017"))
     parser.add_argument("--db-name", default=os.getenv("MONGO_DB_NAME", "TopBrain_DB"))
     parser.add_argument("--binary-collection", default=os.getenv("TOPBRAIN_2D_BINARY_COLLECTION", "MultiClassPatients2D_Binary"))
@@ -598,24 +625,39 @@ def main() -> None:
     if not args.partition_file:
         raise ValueError("TOPBRAIN_PARTITION_FILE is required.")
 
-    train_ids, val_ids = load_partition(args.partition_file, args.fold)
     save_dir = Path(args.save_dir)
     save_dir.mkdir(parents=True, exist_ok=True)
 
     strategies = [args.strategy] if args.strategy != "all" else ["directfiles", "binary", "polygons"]
-    results = []
-    for st in strategies:
-        res = train_one_strategy(st, args, train_ids, val_ids, save_dir)
-        results.append(res)
+
+    fold_names = load_fold_names(args.partition_file, args.num_folds) if args.all_folds else [args.fold]
+    all_fold_results = []
+
+    for fold_name in fold_names:
+        fold_args = argparse.Namespace(**vars(args))
+        fold_args.fold = fold_name
+        train_ids, val_ids = load_partition(args.partition_file, fold_name)
+
+        print(f"\n================ FOLD {fold_name} ================")
+        fold_results = []
+        for st in strategies:
+            res = train_one_strategy(st, fold_args, train_ids, val_ids, save_dir)
+            fold_results.append(res)
+        all_fold_results.append({"fold": fold_name, "strategies": fold_results})
 
     out_path = Path(args.output_json)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     with out_path.open("w", encoding="utf-8") as f:
-        json.dump({"fold": args.fold, "strategies": results}, f, indent=2, ensure_ascii=False)
+        if args.all_folds:
+            json.dump({"folds": all_fold_results}, f, indent=2, ensure_ascii=False)
+        else:
+            json.dump(all_fold_results[0], f, indent=2, ensure_ascii=False)
 
     print("\n=== PHASE C | SUMMARY ===")
-    for r in results:
-        print(f"{r['strategy']:<12} best_combined={r['best_combined']:.4f} epoch={r['best_epoch']}")
+    for fold_row in all_fold_results:
+        print(f"\n[{fold_row['fold']}]")
+        for r in fold_row["strategies"]:
+            print(f"{r['strategy']:<12} best_combined={r['best_combined']:.4f} epoch={r['best_epoch']}")
     print(f"Saved: {out_path}")
 
 
