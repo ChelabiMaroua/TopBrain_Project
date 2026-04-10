@@ -20,7 +20,6 @@ from torch.utils.data import DataLoader, Dataset, WeightedRandomSampler
 ROOT = Path(__file__).resolve().parents[1]
 EXTRACT_DIR = ROOT / "1_ETL" / "Extract"
 TRANSFORM_DIR = ROOT / "1_ETL" / "Transform"
-UNET3D_DIR = ROOT / "4_Unet3D"
 if str(EXTRACT_DIR) not in sys.path:
     sys.path.insert(0, str(EXTRACT_DIR))
 if str(TRANSFORM_DIR) not in sys.path:
@@ -41,13 +40,11 @@ def _load_module(module_name: str, file_path: Path):
 _extract_mod = _load_module("extract_t0_list_patient_files", EXTRACT_DIR / "extract_t0_list_patient_files.py")
 _t2_mod = _load_module("transform_t2_resize", TRANSFORM_DIR / "transform_t2_resize.py")
 _t3_mod = _load_module("transform_t3_normalization", TRANSFORM_DIR / "transform_t3_normalization.py")
-_metrics_mod = _load_module("metrics_dice_iou", UNET3D_DIR / "metrics_dice_iou.py")
 
 detect_existing_dir = _extract_mod.detect_existing_dir
 list_patient_files = _extract_mod.list_patient_files
 resize_pair = _t2_mod.resize_pair
 normalize_volume = _t3_mod.normalize_volume
-dice_iou_per_class = _metrics_mod.dice_iou_per_class
 
 load_dotenv()
 
@@ -277,7 +274,7 @@ def class_weights_from_dataset(dataset: Dataset, num_classes: int) -> torch.Tens
 
 def make_criterion(weights: torch.Tensor):
     if DiceCELoss is not None:
-        return DiceCELoss(to_onehot_y=True, softmax=True, lambda_dice=0.5, lambda_ce=0.5, weight=weights)
+        return DiceCELoss(to_onehot_y=True, softmax=True, lambda_dice=1.0, lambda_ce=0.5, weight=weights)
     return nn.CrossEntropyLoss(weight=weights)
 
 
@@ -392,24 +389,57 @@ def run_epoch(model, loader, criterion, optimizer, device):
 @torch.no_grad()
 def eval_metrics(model, loader, num_classes, device):
     model.eval()
-    agg: Dict[str, float] = {}
-    n = 0
+    tp = torch.zeros(num_classes, dtype=torch.float64)
+    fp = torch.zeros(num_classes, dtype=torch.float64)
+    fn = torch.zeros(num_classes, dtype=torch.float64)
+
     for x, y in loader:
         x = x.to(device, non_blocking=True)
         y = y.to(device, non_blocking=True)
-        p = torch.argmax(model(x), dim=1)
-        m = dice_iou_per_class(p, y, num_classes=num_classes)
-        if not agg:
-            agg = {k: 0.0 for k in m.keys()}
-        for k, v in m.items():
-            agg[k] += float(v)
-        n += 1
-    if n > 0:
-        for k in list(agg.keys()):
-            agg[k] /= n
-    else:
-        agg = {"mean_dice_fg": 0.0, "mean_iou_fg": 0.0, "combined_score": 0.0}
-    return agg
+        pred = torch.argmax(model(x), dim=1)
+
+        for c in range(1, num_classes):
+            pred_c = pred == c
+            true_c = y == c
+            tp[c] += (pred_c & true_c).sum().cpu()
+            fp[c] += (pred_c & ~true_c).sum().cpu()
+            fn[c] += (~pred_c & true_c).sum().cpu()
+
+    dice_scores: Dict[int, float] = {}
+    iou_scores: Dict[int, float] = {}
+    active_classes: List[int] = []
+
+    for c in range(1, num_classes):
+        total_gt = tp[c] + fn[c]
+        if total_gt.item() == 0.0:
+            continue
+
+        active_classes.append(c)
+        denom_dice = 2.0 * tp[c] + fp[c] + fn[c]
+        denom_iou = tp[c] + fp[c] + fn[c]
+        dice_scores[c] = (2.0 * tp[c] / denom_dice).item() if denom_dice.item() > 0.0 else 0.0
+        iou_scores[c] = (tp[c] / denom_iou).item() if denom_iou.item() > 0.0 else 0.0
+
+    if not active_classes:
+        return {"mean_dice_fg": 0.0, "mean_iou_fg": 0.0, "combined_score": 0.0}
+
+    mean_dice = sum(dice_scores[c] for c in active_classes) / len(active_classes)
+    mean_iou = sum(iou_scores[c] for c in active_classes) / len(active_classes)
+
+    result: Dict[str, float] = {
+        "mean_dice_fg": mean_dice,
+        "mean_iou_fg": mean_iou,
+        "combined_score": (mean_dice + mean_iou) / 2.0,
+    }
+    for c in active_classes:
+        result[f"dice_class_{c}"] = dice_scores[c]
+        result[f"iou_class_{c}"] = iou_scores[c]
+
+    per_class_str = " | ".join(
+        f"c{c}: d={dice_scores[c]:.3f} iou={iou_scores[c]:.3f}" for c in active_classes
+    )
+    print(f"  [per-class] {per_class_str}")
+    return result
 
 
 def build_dataset(strategy: str, args, patient_ids: List[str], target_size_key: str):
@@ -456,6 +486,17 @@ def train_one_strategy(strategy: str, args, train_ids: List[str], val_ids: List[
 
     if len(train_ds) == 0 or len(val_ds) == 0:
         raise RuntimeError(f"Empty dataset for strategy={strategy}")
+
+    val_class_counts = np.zeros(args.num_classes, dtype=np.int64)
+    for i in range(len(val_ds)):
+        _, lbl = val_ds[i]
+        for c in range(args.num_classes):
+            if (lbl == c).any().item():
+                val_class_counts[c] += 1
+    print(
+        "[val audit] slices containing each class: "
+        + " ".join(f"c{c}:{val_class_counts[c]}" for c in range(args.num_classes))
+    )
 
     sampler = None
     if args.sampling_mode == "foreground":
@@ -608,14 +649,14 @@ def main() -> None:
         default="class-aware",
         help="Sampling strategy for training slices.",
     )
-    parser.add_argument("--foreground-boost", type=float, default=3.0)
+    parser.add_argument("--foreground-boost", type=float, default=5.0)
     parser.add_argument(
         "--class-boosts",
         type=str,
-        default="3:4.0,5:6.0",
+        default="3:6.0,4:5.0,5:10.0",
         help="Comma-separated boosts, e.g. '3:4.0,5:6.0'.",
     )
-    parser.add_argument("--max-sample-weight", type=float, default=12.0)
+    parser.add_argument("--max-sample-weight", type=float, default=20.0)
     parser.add_argument("--early-stopping", type=int, default=30)
     parser.add_argument("--min-epochs", type=int, default=40)
     parser.add_argument("--save-dir", default=os.getenv("TOPBRAIN_2D_CHECKPOINT_DIR", "4_Unet2D/checkpoints"))
