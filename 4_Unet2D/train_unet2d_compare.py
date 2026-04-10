@@ -263,13 +263,18 @@ def class_weights_from_dataset(dataset: Dataset, num_classes: int) -> torch.Tens
     for i in range(len(dataset)):
         _, y = dataset[i]
         arr = y.numpy()
-        binc = np.bincount(arr.ravel(), minlength=num_classes)
-        counts += binc[:num_classes]
+        counts += np.bincount(arr.ravel(), minlength=num_classes)[:num_classes]
+
     counts = np.maximum(counts, 1.0)
-    inv = 1.0 / counts
-    inv[0] *= 0.1
-    inv /= np.mean(inv)
-    return torch.tensor(inv.astype(np.float32), dtype=torch.float32)
+    freq = counts / counts.sum()
+    weights = 1.0 / (freq + 1e-6)
+    # Keep background down-weighted, but only after frequency-aware scaling.
+    weights[0] *= 0.05
+    fg_mean = np.mean(weights[1:]) if num_classes > 1 else 1.0
+    weights /= max(fg_mean, 1e-6)
+
+    print("[class weights] " + " ".join(f"c{i}:{weights[i]:.2f}" for i in range(num_classes)))
+    return torch.tensor(weights.astype(np.float32), dtype=torch.float32)
 
 
 def make_criterion(weights: torch.Tensor):
@@ -392,11 +397,13 @@ def eval_metrics(model, loader, num_classes, device):
     tp = torch.zeros(num_classes, dtype=torch.float64)
     fp = torch.zeros(num_classes, dtype=torch.float64)
     fn = torch.zeros(num_classes, dtype=torch.float64)
+    pred_counts = np.zeros(num_classes, dtype=np.int64)
 
     for x, y in loader:
         x = x.to(device, non_blocking=True)
         y = y.to(device, non_blocking=True)
         pred = torch.argmax(model(x), dim=1)
+        pred_counts += np.bincount(pred.detach().cpu().numpy().ravel(), minlength=num_classes)[:num_classes]
 
         for c in range(1, num_classes):
             pred_c = pred == c
@@ -438,6 +445,10 @@ def eval_metrics(model, loader, num_classes, device):
     per_class_str = " | ".join(
         f"c{c}: d={dice_scores[c]:.3f} iou={iou_scores[c]:.3f}" for c in active_classes
     )
+    total_pred = int(pred_counts.sum())
+    if total_pred > 0:
+        pred_dist = " ".join(f"c{i}:{(100.0 * pred_counts[i] / total_pred):.1f}%" for i in range(num_classes))
+        print(f"  [pred dist] {pred_dist}")
     print(f"  [per-class] {per_class_str}")
     return result
 
@@ -638,7 +649,7 @@ def main() -> None:
     parser.add_argument("--num-workers", type=int, default=0)
     parser.add_argument("--num-classes", type=int, default=6)
     parser.add_argument("--base-channels", type=int, default=32)
-    parser.add_argument("--lr", type=float, default=1e-4)
+    parser.add_argument("--lr", type=float, default=3e-4)
     parser.add_argument("--eta-min-lr", type=float, default=1e-6)
     parser.add_argument("--augment", dest="augment", action="store_true")
     parser.add_argument("--no-augment", dest="augment", action="store_false")
@@ -653,7 +664,7 @@ def main() -> None:
     parser.add_argument(
         "--class-boosts",
         type=str,
-        default="3:6.0,4:5.0,5:10.0",
+        default="1:2.0,2:3.0,3:5.0,4:15.0,5:1.0",
         help="Comma-separated boosts, e.g. '3:4.0,5:6.0'.",
     )
     parser.add_argument("--max-sample-weight", type=float, default=20.0)
