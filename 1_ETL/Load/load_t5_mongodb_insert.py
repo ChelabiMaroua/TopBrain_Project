@@ -271,12 +271,15 @@ def main() -> None:
     parser.add_argument("--label-dir", default=os.getenv("TOPBRAIN_LABEL_DIR", ""))
     parser.add_argument("--target-size", nargs=3, type=int, default=[128, 128, 64])
     parser.add_argument("--class-min", type=int, default=0)
-    parser.add_argument("--class-max", type=int, default=5)
-    parser.add_argument("--window-min", type=float, default=None)
-    parser.add_argument("--window-max", type=float, default=None)
+    parser.add_argument("--class-max", type=int, default=40)
+    parser.add_argument("--window-min", type=float, default=0.0)
+    parser.add_argument("--window-max", type=float, default=600.0)
     parser.add_argument("--mongo-uri", default=os.getenv("MONGO_URI", "mongodb://localhost:27017"))
     parser.add_argument("--db-name", default=os.getenv("MONGO_DB_NAME", "TopBrain_DB"))
-    parser.add_argument("--collection", default=os.getenv("MONGO_BINARY_COLLECTION", "MultiClassPatients"))
+    parser.add_argument(
+        "--collection",
+        default=os.getenv("TOPBRAIN_3D_BINARY_COLLECTION", os.getenv("MONGO_BINARY_COLLECTION", "MultiClassPatients3D_CTA41")),
+    )
     parser.add_argument(
         "--keep-multiclass-labels",
         action="store_true",

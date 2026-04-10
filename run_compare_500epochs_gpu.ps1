@@ -14,8 +14,8 @@ param(
     [string]$SamplingMode3D = "class-aware",
     [double]$ForegroundBoost2D = 2.5,
     [double]$ForegroundBoost3D = 2.0,
-    [string]$ClassBoosts2D = "3:5.0,5:7.0,4:2.0",
-    [string]$ClassBoosts3D = "3:5.0,5:7.0,4:2.0",
+    [string]$ClassBoosts2D = "",
+    [string]$ClassBoosts3D = "",
     [double]$MaxSampleWeight2D = 14,
     [double]$MaxSampleWeight3D = 12
 )
@@ -82,7 +82,12 @@ New-Item -ItemType Directory -Path $markersDir -Force | Out-Null
 $etlCmd = @(
     $PythonExe,
     "1_ETL/Load/load_t6_mongodb_insert_2d.py",
-    "--target-size", "128", "128", "64"
+    "--target-size", "256", "256", "192",
+    "--class-min", "0",
+    "--class-max", "40",
+    "--num-classes", "41",
+    "--window-min", "0",
+    "--window-max", "600"
 )
 Invoke-Step -Name "Populate 2D Mongo collections" -Command $etlCmd -Marker (Join-Path $markersDir "step_etl2d.done") -LogPath (Join-Path $logsDir "step_etl2d.log") -Skip:(!$RunEtl2D)
 
@@ -92,6 +97,7 @@ $train2dCmd = @(
     "--strategy", "all",
     "--fold", $Fold,
     "--epochs", "500",
+    "--num-classes", "41",
     "--batch-size", "$BatchSize2D",
     "--num-workers", "$NumWorkers",
     "--augment",
@@ -108,6 +114,7 @@ $train3dCmd = @(
     "--strategy", "all",
     "--fold", $Fold,
     "--epochs", "500",
+    "--num-classes", "41",
     "--batch-size", "$BatchSize3D",
     "--num-workers", "$NumWorkers",
     "--sampling-mode", $SamplingMode3D,

@@ -30,7 +30,10 @@ def main():
     # Paramètres de connexion
     parser.add_argument("--mongo-uri", default=os.getenv("MONGO_URI", "mongodb://localhost:27017"))
     parser.add_argument("--db-name", default=os.getenv("MONGO_DB_NAME", "TopBrain_DB"))
-    parser.add_argument("--collection", default=os.getenv("MONGO_BINARY_COLLECTION", "MultiClassPatients"))
+    parser.add_argument(
+        "--collection",
+        default=os.getenv("TOPBRAIN_3D_BINARY_COLLECTION", os.getenv("MONGO_BINARY_COLLECTION", "MultiClassPatients3D_CTA41")),
+    )
     
     # Paramètres de partitionnement
     parser.add_argument("--k", type=int, default=5, help="Nombre de Folds")

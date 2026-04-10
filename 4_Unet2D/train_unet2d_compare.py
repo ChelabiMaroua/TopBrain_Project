@@ -54,6 +54,10 @@ except Exception:
     DiceCELoss = None
 
 
+CTA_WINDOW_MIN = float(os.getenv("TOPBRAIN_CTA_WINDOW_MIN", "0"))
+CTA_WINDOW_MAX = float(os.getenv("TOPBRAIN_CTA_WINDOW_MAX", "600"))
+
+
 def apply_2d_augmentation(img2: np.ndarray, lbl2: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
     """Light 2D augmentation applied on training samples only."""
     if np.random.rand() < 0.5:
@@ -130,7 +134,7 @@ class DirectFiles2DDataset(Dataset):
             img = nib.load(it["img_path"]).get_fdata().astype(np.float32)
             lbl = nib.load(it["lbl_path"]).get_fdata().astype(np.int64)
             img, lbl = resize_pair(img=img, lbl=lbl, target_size=target_size)
-            img = normalize_volume(img, window_min=-100.0, window_max=400.0).astype(np.float32)
+            img = normalize_volume(img, window_min=CTA_WINDOW_MIN, window_max=CTA_WINDOW_MAX).astype(np.float32)
             lbl = np.clip(lbl.astype(np.int64), 0, num_classes - 1)
             pid = normalize_pid(it["patient_id"])
             for z in range(img.shape[2]):
@@ -230,7 +234,7 @@ class PolygonMongo2DDataset(Dataset):
         img = nib.load(img_path).get_fdata().astype(np.float32)
         dummy_lbl = np.zeros_like(img, dtype=np.int16)
         img, _ = resize_pair(img=img, lbl=dummy_lbl, target_size=target_size)
-        img = normalize_volume(img, window_min=-100.0, window_max=400.0).astype(np.float32)
+        img = normalize_volume(img, window_min=CTA_WINDOW_MIN, window_max=CTA_WINDOW_MAX).astype(np.float32)
         self.image_cache[cache_key] = img
         return img
 
@@ -649,13 +653,13 @@ def main() -> None:
     )
     parser.add_argument("--mongo-uri", default=os.getenv("MONGO_URI", "mongodb://localhost:27017"))
     parser.add_argument("--db-name", default=os.getenv("MONGO_DB_NAME", "TopBrain_DB"))
-    parser.add_argument("--binary-collection", default=os.getenv("TOPBRAIN_2D_BINARY_COLLECTION", "MultiClassPatients2D_Binary"))
-    parser.add_argument("--polygon-collection", default=os.getenv("TOPBRAIN_2D_POLYGON_COLLECTION", "MultiClassPatients2D_Polygons"))
-    parser.add_argument("--target-size", nargs=3, type=int, default=[128, 128, 64])
+    parser.add_argument("--binary-collection", default=os.getenv("TOPBRAIN_2D_BINARY_COLLECTION", "MultiClassPatients2D_Binary_CTA41"))
+    parser.add_argument("--polygon-collection", default=os.getenv("TOPBRAIN_2D_POLYGON_COLLECTION", "MultiClassPatients2D_Polygons_CTA41"))
+    parser.add_argument("--target-size", nargs=3, type=int, default=[256, 256, 192])
     parser.add_argument("--epochs", type=int, default=int(os.getenv("TOPBRAIN_2D_EPOCHS", "150")))
     parser.add_argument("--batch-size", type=int, default=8)
     parser.add_argument("--num-workers", type=int, default=0)
-    parser.add_argument("--num-classes", type=int, default=6)
+    parser.add_argument("--num-classes", type=int, default=int(os.getenv("TOPBRAIN_NUM_CLASSES", "41")))
     parser.add_argument("--base-channels", type=int, default=32)
     parser.add_argument("--lr", type=float, default=3e-4)
     parser.add_argument("--eta-min-lr", type=float, default=1e-6)
@@ -672,7 +676,7 @@ def main() -> None:
     parser.add_argument(
         "--class-boosts",
         type=str,
-        default="1:2.0,2:3.0,3:5.0,4:15.0,5:1.0",
+        default="",
         help="Comma-separated boosts, e.g. '3:4.0,5:6.0'.",
     )
     parser.add_argument("--max-sample-weight", type=float, default=20.0)

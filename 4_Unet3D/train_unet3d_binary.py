@@ -214,15 +214,17 @@ def main() -> None:
     )
     parser.add_argument("--mongo-uri", default=os.getenv("MONGO_URI", "mongodb://localhost:27017"))
     parser.add_argument("--db-name", default=os.getenv("MONGO_DB_NAME", "TopBrain_DB"))
-    parser.add_argument("--collection", default=os.getenv("MONGO_BINARY_COLLECTION", "MultiClassPatients"))
+    parser.add_argument(
+        "--collection",
+        default=os.getenv("TOPBRAIN_3D_BINARY_COLLECTION", os.getenv("MONGO_BINARY_COLLECTION", "MultiClassPatients3D_CTA41")),
+    )
     parser.add_argument("--target-size", default=os.getenv("TOPBRAIN_TARGET_SIZE", "128x128x64"))
     parser.add_argument("--partition-file", default=os.getenv("TOPBRAIN_PARTITION_FILE", ""))
     parser.add_argument("--fold", default="fold_1", choices=["fold_1", "fold_2", "fold_3", "fold_4", "fold_5"])
     parser.add_argument("--epochs", type=int, default=100)
     parser.add_argument("--batch-size", type=int, default=1)
     parser.add_argument("--lr", type=float, default=1e-4)
-    # FIX: default is now 6 to match the TopBrain dataset (background + 5 structures)
-    parser.add_argument("--num-classes", type=int, default=6)
+    parser.add_argument("--num-classes", type=int, default=int(os.getenv("TOPBRAIN_NUM_CLASSES", "41")))
     parser.add_argument("--loss", choices=["ce", "dicece"], default="dicece")
     parser.add_argument("--lambda-dice", type=float, default=1.0)
     parser.add_argument("--lambda-ce", type=float, default=1.0)
@@ -230,8 +232,8 @@ def main() -> None:
         "--class-weights",
         default="",
         help=(
-            "Poids CE séparés par virgule. Pour 6 classes : 0.1,1.0,2.0,1.5,1.5,2.5 "
-            "(background faible, structures rares élevées)"
+            "Poids CE séparés par virgule (longueur = num_classes). "
+            "Exemple CTA41: 0.05,1.0,1.0,..."
         ),
     )
     parser.add_argument(
@@ -343,7 +345,7 @@ def main() -> None:
         if len(values) != args.num_classes:
             raise ValueError(
                 f"--class-weights attend {args.num_classes} valeurs, reçu {len(values)}. "
-                f"Pour 6 classes : 0.1,1.0,2.0,1.5,1.5,2.5"
+                "Le nombre de poids doit être égal à --num-classes."
             )
         ce_weight_tensor = torch.tensor(values, dtype=torch.float32, device=device)
     elif args.auto_class_weights:

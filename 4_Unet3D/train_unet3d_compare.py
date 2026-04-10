@@ -59,6 +59,10 @@ except Exception:
     DiceCELoss = None
 
 
+CTA_WINDOW_MIN = float(os.getenv("TOPBRAIN_CTA_WINDOW_MIN", "0"))
+CTA_WINDOW_MAX = float(os.getenv("TOPBRAIN_CTA_WINDOW_MAX", "600"))
+
+
 def normalize_pid(value: object) -> str:
     text = str(value).strip()
     nums = re.findall(r"\d+", text)
@@ -91,7 +95,7 @@ class DirectFiles3DDataset(Dataset):
             img = nib.load(it["img_path"]).get_fdata().astype(np.float32)
             lbl = nib.load(it["lbl_path"]).get_fdata().astype(np.int64)
             img, lbl = resize_pair(img=img, lbl=lbl, target_size=target_size)
-            img = normalize_volume(img, window_min=-100.0, window_max=400.0).astype(np.float32)
+            img = normalize_volume(img, window_min=CTA_WINDOW_MIN, window_max=CTA_WINDOW_MAX).astype(np.float32)
             lbl = np.clip(lbl.astype(np.int64), 0, num_classes - 1)
             self.samples.append((img, lbl))
 
@@ -130,7 +134,7 @@ class BinaryMongo3DDataset(Dataset):
         shape = tuple(d["shape"])
         img = np.frombuffer(d["img_data"], dtype=np.dtype(d.get("img_dtype", "float32"))).reshape(shape).astype(np.float32, copy=True)
         lbl = np.frombuffer(d["lbl_data"], dtype=np.dtype(d.get("lbl_dtype", "int64"))).reshape(shape).astype(np.int64, copy=True)
-        img = normalize_volume(img, window_min=-100.0, window_max=400.0).astype(np.float32)
+        img = normalize_volume(img, window_min=CTA_WINDOW_MIN, window_max=CTA_WINDOW_MAX).astype(np.float32)
         lbl = np.clip(lbl, 0, self.num_classes - 1)
         return torch.from_numpy(img[None, ...]).float(), torch.from_numpy(lbl).long()
 
@@ -189,7 +193,7 @@ class PolygonMongo3DDataset(Dataset):
                 lbl[:, :, int(z_idx)] = np.where(mask > 0, cls, lbl[:, :, int(z_idx)])
 
         img, lbl = resize_pair(img=img, lbl=lbl, target_size=self.target_size)
-        img = normalize_volume(img, window_min=-100.0, window_max=400.0).astype(np.float32)
+        img = normalize_volume(img, window_min=CTA_WINDOW_MIN, window_max=CTA_WINDOW_MAX).astype(np.float32)
         lbl = np.clip(lbl.astype(np.int64), 0, self.num_classes - 1)
 
         return torch.from_numpy(img[None, ...]).float(), torch.from_numpy(lbl).long()
@@ -505,13 +509,16 @@ def main() -> None:
     parser.add_argument("--fold", default="fold_1")
     parser.add_argument("--mongo-uri", default=os.getenv("MONGO_URI", "mongodb://localhost:27017"))
     parser.add_argument("--db-name", default=os.getenv("MONGO_DB_NAME", "TopBrain_DB"))
-    parser.add_argument("--binary-collection", default=os.getenv("MONGO_BINARY_COLLECTION", "MultiClassPatients"))
+    parser.add_argument(
+        "--binary-collection",
+        default=os.getenv("TOPBRAIN_3D_BINARY_COLLECTION", os.getenv("MONGO_BINARY_COLLECTION", "MultiClassPatients3D_CTA41")),
+    )
     parser.add_argument("--polygon-collection", default=os.getenv("TOPBRAIN_3D_POLYGON_COLLECTION", "PolygonPatients"))
     parser.add_argument("--target-size", nargs=3, type=int, default=[128, 128, 64])
     parser.add_argument("--epochs", type=int, default=int(os.getenv("TOPBRAIN_3D_EPOCHS", "150")))
     parser.add_argument("--batch-size", type=int, default=1)
     parser.add_argument("--num-workers", type=int, default=0)
-    parser.add_argument("--num-classes", type=int, default=6)
+    parser.add_argument("--num-classes", type=int, default=int(os.getenv("TOPBRAIN_NUM_CLASSES", "41")))
     parser.add_argument("--base-channels", type=int, default=32)
     parser.add_argument("--lr", type=float, default=1e-4)
     parser.add_argument("--eta-min-lr", type=float, default=1e-6)
@@ -525,7 +532,7 @@ def main() -> None:
     parser.add_argument(
         "--class-boosts",
         type=str,
-        default="3:5.0,5:7.0",
+        default="",
         help="Comma-separated boosts, e.g. '3:5.0,5:7.0'.",
     )
     parser.add_argument("--max-sample-weight", type=float, default=12.0)

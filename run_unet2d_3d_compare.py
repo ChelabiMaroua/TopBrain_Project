@@ -30,8 +30,8 @@ def main() -> None:
     parser.add_argument("--sampling-mode-3d", choices=["none", "foreground", "class-aware"], default="class-aware")
     parser.add_argument("--foreground-boost-2d", type=float, default=2.5)
     parser.add_argument("--foreground-boost-3d", type=float, default=2.0)
-    parser.add_argument("--class-boosts-2d", default="3:5.0,5:7.0,4:2.0")
-    parser.add_argument("--class-boosts-3d", default="3:5.0,5:7.0,4:2.0")
+    parser.add_argument("--class-boosts-2d", default="")
+    parser.add_argument("--class-boosts-3d", default="")
     parser.add_argument("--max-sample-weight-2d", type=float, default=14.0)
     parser.add_argument("--max-sample-weight-3d", type=float, default=12.0)
     parser.add_argument("--skip-2d", action="store_true")
@@ -51,6 +51,8 @@ def main() -> None:
                 args.fold,
                 "--epochs",
                 str(args.epochs_2d),
+                "--num-classes",
+                "41",
                 "--batch-size",
                 str(args.batch_size_2d),
                 "--num-workers",
@@ -78,6 +80,8 @@ def main() -> None:
                 args.fold,
                 "--epochs",
                 str(args.epochs_3d),
+                "--num-classes",
+                "41",
                 "--batch-size",
                 str(args.batch_size_3d),
                 "--num-workers",

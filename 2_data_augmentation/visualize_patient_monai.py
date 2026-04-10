@@ -127,7 +127,7 @@ def main():
     parser.add_argument("--target-size", nargs=3, type=int, default=[128, 128, 64])
     parser.add_argument("--mongo-uri", default="mongodb://localhost:27017")
     parser.add_argument("--db-name", default="TopBrain_DB")
-    parser.add_argument("--collection", default="MultiClassPatients")
+    parser.add_argument("--collection", default="MultiClassPatients3D_CTA41")
     parser.add_argument("--axis", type=int, choices=[0, 1, 2], default=2) # Axial par défaut
     parser.add_argument("--seed", type=int, default=42)
     args = parser.parse_args()
