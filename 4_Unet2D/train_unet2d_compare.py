@@ -399,11 +399,16 @@ def eval_metrics(model, loader, num_classes, device):
     fn = torch.zeros(num_classes, dtype=torch.float64)
     pred_counts = np.zeros(num_classes, dtype=np.int64)
 
+    pred_counts = np.zeros(num_classes, dtype=np.int64)
     for x, y in loader:
         x = x.to(device, non_blocking=True)
         y = y.to(device, non_blocking=True)
         pred = torch.argmax(model(x), dim=1)
         pred_counts += np.bincount(pred.detach().cpu().numpy().ravel(), minlength=num_classes)[:num_classes]
+
+        flat = pred.cpu().numpy().ravel()
+        for c in range(num_classes):
+            pred_counts[c] += int((flat == c).sum())
 
         for c in range(1, num_classes):
             pred_c = pred == c
@@ -427,6 +432,9 @@ def eval_metrics(model, loader, num_classes, device):
         dice_scores[c] = (2.0 * tp[c] / denom_dice).item() if denom_dice.item() > 0.0 else 0.0
         iou_scores[c] = (tp[c] / denom_iou).item() if denom_iou.item() > 0.0 else 0.0
 
+    total_preds = max(1, int(pred_counts.sum()))
+    pred_dist = {c: f"{100*pred_counts[c]/total_preds:.1f}%" for c in range(num_classes)}
+    print(f"  [pred dist] {pred_dist}")
     if not active_classes:
         return {"mean_dice_fg": 0.0, "mean_iou_fg": 0.0, "combined_score": 0.0}
 
