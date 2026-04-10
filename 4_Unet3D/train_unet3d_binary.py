@@ -216,7 +216,7 @@ def main() -> None:
     parser.add_argument("--db-name", default=os.getenv("MONGO_DB_NAME", "TopBrain_DB"))
     parser.add_argument(
         "--collection",
-        default=os.getenv("TOPBRAIN_3D_BINARY_COLLECTION", os.getenv("MONGO_BINARY_COLLECTION", "MultiClassPatients3D_CTA41")),
+        default=os.getenv("TOPBRAIN_3D_BINARY_COLLECTION", os.getenv("MONGO_BINARY_COLLECTION", "MultiClassPatients3D_Binary_CTA41")),
     )
     parser.add_argument("--target-size", default=os.getenv("TOPBRAIN_TARGET_SIZE", "128x128x64"))
     parser.add_argument("--partition-file", default=os.getenv("TOPBRAIN_PARTITION_FILE", ""))

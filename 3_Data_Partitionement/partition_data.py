@@ -32,7 +32,7 @@ def main():
     parser.add_argument("--db-name", default=os.getenv("MONGO_DB_NAME", "TopBrain_DB"))
     parser.add_argument(
         "--collection",
-        default=os.getenv("TOPBRAIN_3D_BINARY_COLLECTION", os.getenv("MONGO_BINARY_COLLECTION", "MultiClassPatients3D_CTA41")),
+        default=os.getenv("TOPBRAIN_3D_BINARY_COLLECTION", os.getenv("MONGO_BINARY_COLLECTION", "MultiClassPatients3D_Binary_CTA41")),
     )
     
     # Paramètres de partitionnement

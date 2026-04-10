@@ -511,9 +511,9 @@ def main() -> None:
     parser.add_argument("--db-name", default=os.getenv("MONGO_DB_NAME", "TopBrain_DB"))
     parser.add_argument(
         "--binary-collection",
-        default=os.getenv("TOPBRAIN_3D_BINARY_COLLECTION", os.getenv("MONGO_BINARY_COLLECTION", "MultiClassPatients3D_CTA41")),
+        default=os.getenv("TOPBRAIN_3D_BINARY_COLLECTION", os.getenv("MONGO_BINARY_COLLECTION", "MultiClassPatients3D_Binary_CTA41")),
     )
-    parser.add_argument("--polygon-collection", default=os.getenv("TOPBRAIN_3D_POLYGON_COLLECTION", "PolygonPatients"))
+    parser.add_argument("--polygon-collection", default=os.getenv("TOPBRAIN_3D_POLYGON_COLLECTION", "MultiClassPatients3D_Polygons_CTA41"))
     parser.add_argument("--target-size", nargs=3, type=int, default=[128, 128, 64])
     parser.add_argument("--epochs", type=int, default=int(os.getenv("TOPBRAIN_3D_EPOCHS", "150")))
     parser.add_argument("--batch-size", type=int, default=1)
