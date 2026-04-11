@@ -1,0 +1,55 @@
+@startuml
+title Pipeline ETL TopBrain (Compact View)
+
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam packageStyle rectangle
+skinparam RoundCorner 8
+skinparam FontSize 12
+
+skinparam Rectangle {
+  BorderColor #3A3A3A
+  FontColor #1F2937
+}
+
+' Utilisation de l'alignement horizontal pour gagner de la place en hauteur
+left to right direction
+
+rectangle "<b>1. EXTRACT</b>" as EX #E6F4EA {
+  rectangle "T0: Patient Discovery" as T0 #D4EDDA
+}
+
+rectangle "<b>2. TRANSFORM</b>" as TR #E8F0FE {
+  rectangle "T1: Load/Cast" as T1 #DCE8FF
+  rectangle "T2: Resize" as T2 #DCE8FF
+  rectangle "T3: Normalize" as T3 #DCE8FF
+  rectangle "T4: Serialize" as T4 #DCE8FF
+  
+  T1 -> T2
+  T2 -> T3
+  T3 -> T4
+}
+
+rectangle "<b>3. LOAD</b>" as LD #FDECEF {
+  rectangle "Strategy A: Files" as SA #FFF4E5
+  rectangle "Strategy B: Polygons" as T7 #FAD1DA
+  rectangle "Strategy C: Binary" as T5 #FAD1DA
+}
+
+database "MongoDB" as MDB #CFE0FF
+
+' Liens principaux
+T0 --> T1
+T4 --> T5
+T3 --> SA
+T3 --> T7
+
+' Sorties DB
+T5 -- MDB
+T7 -- MDB
+
+' Suppression des espaces inutiles
+skinparam nodesep 10
+skinparam ranksep 20
+
+@enduml

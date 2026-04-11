@@ -1,0 +1,63 @@
+@startuml
+title MongoDB Document Structure - PolygonPatients (TopBrain)
+
+skinparam shadowing false
+skinparam roundCorner 15
+skinparam defaultFontName Arial
+
+!define LEVEL1 #D4EDDA
+!define LEVEL2 #E8F0FE
+!define LEVEL3 #FFF4E5
+!define LEVEL4 #FDECEF
+
+node "<b>Collection: PolygonPatients</b>" as Coll #white {
+
+  object "<b>Root Document</b>" as Root LEVEL1 {
+    _id : ObjectId("...")
+    patient_id : "001"
+  }
+
+  object "<b>metadata</b> (Object)" as Meta LEVEL2 {
+    img_path : ".../topcow_ct_001_0000.nii.gz"
+    lbl_path : ".../topcow_ct_001.nii.gz"
+  }
+
+  object "<b>dimensions</b> (Object)" as Dim LEVEL2 {
+    height : H
+    width : W
+    depth : D
+  }
+
+  object "<b>segments</b> (Array)" as SegArray #E0E0E0 {
+    [0..N] Segment objects
+  }
+
+  object "<b>Segment Object</b>" as SegItem LEVEL3 {
+    label_id : 0..40
+  }
+
+  object "<b>statistics</b> (Object, optional)" as Stats LEVEL3 {
+    voxel_count : int
+    centroid : [x, y, z]
+    extent : [dx, dy, dz]
+  }
+
+  object "<b>polygons</b> (Array)" as PolyArray #E0E0E0 {
+    [0..M] Polygon objects
+  }
+
+  object "<b>Polygon Object</b>" as PolyItem LEVEL4 {
+    z_index : int
+    contours : [ [[x,y],...], [[x,y],...] ]
+  }
+}
+
+Root *-- Meta
+Meta *-- Dim
+Root *-- SegArray
+SegArray "1" *-- "N" SegItem
+SegItem *-- Stats
+SegItem *-- PolyArray
+PolyArray "1" *-- "M" PolyItem
+
+@enduml

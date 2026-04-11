@@ -1,0 +1,90 @@
+@startuml
+title Architecture du Projet TopBrain - Vue Macro
+
+skinparam shadowing false
+skinparam defaultFontName Arial
+skinparam packageStyle rectangle
+skinparam BackgroundColor #FCFCFC
+skinparam Rectangle {
+  BorderColor #3A3A3A
+  FontColor #1F2937
+  RoundCorner 12
+}
+skinparam Card {
+  BorderColor #3A3A3A
+  FontColor #1F2937
+  RoundCorner 10
+}
+skinparam Database {
+  BorderColor #3A3A3A
+  FontColor #1F2937
+}
+skinparam Arrow {
+  Color #4B5563
+  Thickness 1
+}
+left to right direction
+
+rectangle "Bloc 1 - Donnees d'entree" as B1 #E6F4EA {
+  card "Dataset TopBrain CT\n25 patients\nVolumes NIfTI (.nii.gz)\n41 labels (0..40)" as IN #D4EDDA
+}
+
+rectangle "Bloc 2 - Pipelines ETL + MongoDB" as B2 #E8F0FE {
+  rectangle "Extract + Transform\n(resize, normalization)" as ETL #DCE8FF
+  rectangle "Strategie A\nAcces fichiers direct" as S1 #DCE8FF
+  rectangle "Strategie B\nMongoDB polygones" as S2 #DCE8FF
+  rectangle "Strategie C\nMongoDB binaire serialize" as S3 #DCE8FF
+  database "MongoDB" as DB #CFE0FF
+}
+
+rectangle "Bloc 3 - Modele d'apprentissage" as B3 #FFF4E5 {
+  rectangle "Partition K-Fold\n20 train / 5 val" as KF #FFD9A3
+  rectangle "UNet2D compare" as M1 #FFE6BF
+  rectangle "UNet3D compare" as M2 #FFE6BF
+  rectangle "nnUNet classic\nprepare -> plan/preprocess -> train" as M3 #FFE6BF
+  rectangle "KPI/Benchmark\nDice, IoU, temps" as BM #FFCC80
+}
+
+rectangle "Bloc 4 - Interface medicale" as B4 #FDECEF {
+  rectangle "Application web radiologue" as UI #FAD1DA
+  rectangle "Chargement fichier NIfTI" as UP #FAD1DA
+  rectangle "Segmentation 3D coloree" as SEG3D #F7B7C4
+  rectangle "Metriques Dice/IoU" as MET #F4A3B5
+}
+
+' Force les 4 blocs principaux sur une seule ligne (de gauche a droite)
+B1 -[hidden]right- B2
+B2 -[hidden]right- B3
+B3 -[hidden]right- B4
+
+IN --> ETL
+ETL --> S1
+ETL --> S2
+ETL --> S3
+
+S1 --> KF
+S2 --> KF
+S3 --> KF
+S2 --> DB
+S3 --> DB
+
+KF --> M1
+KF --> M2
+KF --> M3
+S1 --> M3
+
+M1 --> BM
+M2 --> BM
+M3 --> BM
+
+BM --> UI
+UP --> UI
+UI --> SEG3D
+UI --> MET
+
+note bottom of B3
+Comparaison experimentale des 3 strategies ETL
+et des 3 architectures (UNet2D, UNet3D, nnUNet classic)
+end note
+
+@enduml
