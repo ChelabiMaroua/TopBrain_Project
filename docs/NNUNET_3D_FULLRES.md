@@ -146,3 +146,28 @@ nnUNetv2_predict \
 - This is an implementation layer; it does not modify your UNet2D/UNet3D custom trainers.
 - For TopBrain CTA, labels are full multiclass (41 classes).
 - If disk space is limited, use `--mode hardlink` in `prepare_nnunet_dataset.py`.
+
+## One-click classic run (RTX 4060)
+
+One-time setup on a new machine (installs CUDA-enabled PyTorch and nnUNet v2):
+
+```powershell
+.\5_nnUNet\setup\setup_nnunet_cuda_4060.ps1
+```
+
+Preview setup commands only:
+
+```powershell
+.\5_nnUNet\setup\setup_nnunet_cuda_4060.ps1 -DryRun
+```
+
+Use this from the project root to run nnUNet classic with safe Windows memory settings:
+
+```powershell
+.\5_nnUNet\setup\run_nnunet_classic_4060.ps1 -DatasetId 1 -Configuration 3d_fullres -Fold 0 -Device cuda -NProcDA 2 -Npz
+```
+
+Optional flags:
+
+- `-Continue` to resume training.
+- `-SkipPreprocess` if preprocessing is already done.
