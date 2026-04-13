@@ -1,0 +1,180 @@
+{
+  "strategy": "mongodb_class_richness",
+  "collection": "MultiClassPatients2D_Binary_CTA41",
+  "target_size": "128x128x64",
+  "num_patients_scored": 25,
+  "patient_scores": {
+    "topcow_ct_003": 793.0,
+    "topcow_ct_022": 731.0,
+    "topcow_ct_014": 676.0,
+    "topcow_ct_026": 666.0,
+    "topcow_ct_021": 647.0,
+    "topcow_ct_023": 645.0,
+    "topcow_ct_012": 637.0,
+    "topcow_ct_018": 624.0,
+    "topcow_ct_011": 617.5,
+    "topcow_ct_004": 616.0,
+    "topcow_ct_025": 610.0,
+    "topcow_ct_005": 607.5,
+    "topcow_ct_002": 603.0,
+    "topcow_ct_001": 598.5,
+    "topcow_ct_013": 572.5,
+    "topcow_ct_020": 554.5,
+    "topcow_ct_015": 543.0,
+    "topcow_ct_027": 537.0,
+    "topcow_ct_017": 516.5,
+    "topcow_ct_007": 510.5,
+    "topcow_ct_008": 483.5,
+    "topcow_ct_016": 458.0,
+    "topcow_ct_024": 453.0,
+    "topcow_ct_006": 442.0,
+    "topcow_ct_010": 423.5
+  },
+  "splits_summary": [
+    {
+      "fold": 0,
+      "train_count": 16,
+      "val_count": 4,
+      "train_ids": [
+        "topcow_ct_001",
+        "topcow_ct_002",
+        "topcow_ct_003",
+        "topcow_ct_004",
+        "topcow_ct_005",
+        "topcow_ct_006",
+        "topcow_ct_007",
+        "topcow_ct_012",
+        "topcow_ct_013",
+        "topcow_ct_016",
+        "topcow_ct_017",
+        "topcow_ct_020",
+        "topcow_ct_024",
+        "topcow_ct_025",
+        "topcow_ct_026",
+        "topcow_ct_023"
+      ],
+      "val_ids": [
+        "topcow_ct_008",
+        "topcow_ct_015",
+        "topcow_ct_027",
+        "topcow_ct_010"
+      ]
+    },
+    {
+      "fold": 1,
+      "train_count": 16,
+      "val_count": 4,
+      "train_ids": [
+        "topcow_ct_001",
+        "topcow_ct_002",
+        "topcow_ct_003",
+        "topcow_ct_004",
+        "topcow_ct_005",
+        "topcow_ct_006",
+        "topcow_ct_008",
+        "topcow_ct_012",
+        "topcow_ct_015",
+        "topcow_ct_017",
+        "topcow_ct_020",
+        "topcow_ct_023",
+        "topcow_ct_024",
+        "topcow_ct_026",
+        "topcow_ct_027",
+        "topcow_ct_025"
+      ],
+      "val_ids": [
+        "topcow_ct_007",
+        "topcow_ct_013",
+        "topcow_ct_016",
+        "topcow_ct_010"
+      ]
+    },
+    {
+      "fold": 2,
+      "train_count": 16,
+      "val_count": 4,
+      "train_ids": [
+        "topcow_ct_001",
+        "topcow_ct_003",
+        "topcow_ct_005",
+        "topcow_ct_006",
+        "topcow_ct_007",
+        "topcow_ct_008",
+        "topcow_ct_013",
+        "topcow_ct_015",
+        "topcow_ct_016",
+        "topcow_ct_017",
+        "topcow_ct_023",
+        "topcow_ct_024",
+        "topcow_ct_025",
+        "topcow_ct_026",
+        "topcow_ct_027",
+        "topcow_ct_012"
+      ],
+      "val_ids": [
+        "topcow_ct_002",
+        "topcow_ct_004",
+        "topcow_ct_020",
+        "topcow_ct_010"
+      ]
+    },
+    {
+      "fold": 3,
+      "train_count": 16,
+      "val_count": 4,
+      "train_ids": [
+        "topcow_ct_001",
+        "topcow_ct_002",
+        "topcow_ct_004",
+        "topcow_ct_006",
+        "topcow_ct_007",
+        "topcow_ct_008",
+        "topcow_ct_012",
+        "topcow_ct_013",
+        "topcow_ct_015",
+        "topcow_ct_016",
+        "topcow_ct_020",
+        "topcow_ct_023",
+        "topcow_ct_025",
+        "topcow_ct_026",
+        "topcow_ct_027",
+        "topcow_ct_003"
+      ],
+      "val_ids": [
+        "topcow_ct_005",
+        "topcow_ct_017",
+        "topcow_ct_024",
+        "topcow_ct_010"
+      ]
+    },
+    {
+      "fold": 4,
+      "train_count": 16,
+      "val_count": 4,
+      "train_ids": [
+        "topcow_ct_002",
+        "topcow_ct_003",
+        "topcow_ct_004",
+        "topcow_ct_005",
+        "topcow_ct_007",
+        "topcow_ct_008",
+        "topcow_ct_012",
+        "topcow_ct_013",
+        "topcow_ct_015",
+        "topcow_ct_016",
+        "topcow_ct_017",
+        "topcow_ct_020",
+        "topcow_ct_023",
+        "topcow_ct_025",
+        "topcow_ct_027",
+        "topcow_ct_026"
+      ],
+      "val_ids": [
+        "topcow_ct_001",
+        "topcow_ct_006",
+        "topcow_ct_010",
+        "topcow_ct_024"
+      ]
+    }
+  ]
+}

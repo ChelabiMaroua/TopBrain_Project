@@ -1,0 +1,49 @@
+@startuml
+title MongoDB Document Structure - MultiClassPatients2D_Polygons_CTA41
+
+skinparam shadowing false
+skinparam roundCorner 15
+skinparam defaultFontName Arial
+
+!define LEVEL1 #D4EDDA
+!define LEVEL2 #E8F0FE
+!define LEVEL3 #FFF4E5
+!define LEVEL4 #FDECEF
+
+node "<b>Collection: MultiClassPatients2D_Polygons_CTA41</b>" as Coll #white {
+
+  object "<b>Root Document</b>" as Root LEVEL1 {
+    schema : "2d_polygon"
+    patient_id : "topcow_ct_001"
+    patient_norm_id : "001"
+    target_size : "128x128x64"
+    slice_idx : 0..63
+    shape : [H, W]
+  }
+
+  object "<b>segments</b> (Array)" as SegArray #E0E0E0 {
+    [0..N] Segment objects
+  }
+
+  object "<b>Segment Object</b>" as SegItem LEVEL3 {
+    label_id : 1..40
+    contours : [ [[x,y], ...], [[x,y], ...] ]
+  }
+
+  object "<b>Source Paths</b>" as Paths LEVEL2 {
+    img_path : ".../imagesTr_topbrain_ct/..."
+    lbl_path : ".../labelsTr_topbrain_ct/..."
+  }
+
+  object "<b>Topology Semantics</b>" as Topo LEVEL4 {
+    1 document = 1 slice
+    contours = composantes connexes par classe
+  }
+}
+
+Root *-- SegArray
+SegArray "1" *-- "N" SegItem
+Root *-- Paths
+SegArray *-- Topo
+
+@enduml

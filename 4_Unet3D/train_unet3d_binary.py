@@ -4,6 +4,7 @@ import os
 import random
 import re
 import sys
+import time
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
@@ -122,6 +123,8 @@ def run_epoch(
     criterion: nn.Module,
     optimizer: Optional[torch.optim.Optimizer],
     device: torch.device,
+    use_amp: bool = False,
+    scaler: Optional[torch.amp.GradScaler] = None,
 ) -> float:
     train_mode = optimizer is not None
     model.train(train_mode)
@@ -133,13 +136,19 @@ def run_epoch(
         x = x.to(device, non_blocking=True)
         y = y.to(device, non_blocking=True)
 
-        logits = model(x)
-        loss = criterion(logits, y)
+        with torch.autocast(device_type=device.type, enabled=use_amp):
+            logits = model(x)
+            loss = criterion(logits, y)
 
         if train_mode:
             optimizer.zero_grad(set_to_none=True)
-            loss.backward()
-            optimizer.step()
+            if scaler is not None and use_amp:
+                scaler.scale(loss).backward()
+                scaler.step(optimizer)
+                scaler.update()
+            else:
+                loss.backward()
+                optimizer.step()
 
         total += float(loss.item())
         count += 1
@@ -153,6 +162,7 @@ def evaluate_metrics(
     loader: DataLoader,
     num_classes: int,
     device: torch.device,
+    use_amp: bool = False,
 ) -> Dict[str, float]:
     model.eval()
 
@@ -167,7 +177,8 @@ def evaluate_metrics(
         x = x.to(device, non_blocking=True)
         y = y.to(device, non_blocking=True)
 
-        pred = torch.argmax(model(x), dim=1)
+        with torch.autocast(device_type=device.type, enabled=use_amp):
+            pred = torch.argmax(model(x), dim=1)
         m = dice_iou_per_class(pred, y, num_classes=num_classes)
 
         agg["mean_dice_fg"] += m["mean_dice_fg"]
@@ -253,6 +264,13 @@ def main() -> None:
     )
     parser.add_argument("--augment", action="store_true")
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--num-workers", type=int, default=2)
+    parser.add_argument("--max-hours", type=float, default=10.0)
+    parser.add_argument(
+        "--amp",
+        action="store_true",
+        help="Active mixed precision (AMP) sur CUDA pour accélérer l'entraînement.",
+    )
     # FIX: add save path for best model weights
     parser.add_argument(
         "--save-dir",
@@ -277,6 +295,8 @@ def main() -> None:
     torch.manual_seed(args.seed)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    use_amp = bool(args.amp and device.type == "cuda")
+    torch.backends.cudnn.benchmark = device.type == "cuda"
 
     _, train_ids, val_ids = load_partition(Path(args.partition_file), args.fold)
 
@@ -303,8 +323,24 @@ def main() -> None:
     )
     val_ds = BinaryMongoDataset(val_docs, num_classes=args.num_classes, augment=False)
 
-    train_loader = DataLoader(train_ds, batch_size=args.batch_size, shuffle=True, num_workers=0)
-    val_loader = DataLoader(val_ds, batch_size=args.batch_size, shuffle=False, num_workers=0)
+    pin_memory = device.type == "cuda"
+    persistent_workers = args.num_workers > 0
+    train_loader = DataLoader(
+        train_ds,
+        batch_size=args.batch_size,
+        shuffle=True,
+        num_workers=args.num_workers,
+        pin_memory=pin_memory,
+        persistent_workers=persistent_workers,
+    )
+    val_loader = DataLoader(
+        val_ds,
+        batch_size=args.batch_size,
+        shuffle=False,
+        num_workers=args.num_workers,
+        pin_memory=pin_memory,
+        persistent_workers=persistent_workers,
+    )
 
     def class_counts_from_docs(docs: List[Dict], num_classes: int) -> np.ndarray:
         counts = np.zeros(num_classes, dtype=np.int64)
@@ -365,6 +401,7 @@ def main() -> None:
         criterion = nn.CrossEntropyLoss(weight=ce_weight_tensor)
 
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
+    scaler = torch.amp.GradScaler(device="cuda", enabled=use_amp)
 
     # FIX: cosine LR scheduler (decays lr smoothly, helps convergence)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
@@ -384,23 +421,36 @@ def main() -> None:
         f"[info] Device={device} | fold={args.fold} | epochs={args.epochs} | "
         f"augment={args.augment} | loss={args.loss} | lr={args.lr}"
     )
+    print(f"[info] num_workers={args.num_workers} | amp={use_amp} | max_hours={args.max_hours}")
     if ce_weight_tensor is not None:
         print(f"[info] CE class weights = {[round(float(x), 4) for x in ce_weight_tensor.detach().cpu().tolist()]}")
     print(f"[info] Checkpoint -> {checkpoint_path}")
 
+    train_start = time.perf_counter()
     for epoch in range(1, args.epochs + 1):
+        elapsed_hours = (time.perf_counter() - train_start) / 3600.0
+        if args.max_hours > 0 and elapsed_hours >= args.max_hours:
+            print(
+                f"[info] Arrêt par budget temps: {elapsed_hours:.2f}h atteintes "
+                f"(limite={args.max_hours:.2f}h)."
+            )
+            break
+
         if args.log_foreground_ratio:
             sample_x, sample_y = next(iter(train_loader))
             fg_ratio = (sample_y > 0).float().mean().item()
             print(f"[data] Foreground ratio (epoch {epoch:03d}, 1er batch): {fg_ratio:.4f}")
 
-        train_loss = run_epoch(model, train_loader, criterion, optimizer, device)
-        val_loss = run_epoch(model, val_loader, criterion, None, device)
-        metrics = evaluate_metrics(model, val_loader, num_classes=args.num_classes, device=device)
+        epoch_t0 = time.perf_counter()
+        train_loss = run_epoch(model, train_loader, criterion, optimizer, device, use_amp=use_amp, scaler=scaler)
+        val_loss = run_epoch(model, val_loader, criterion, None, device, use_amp=use_amp, scaler=None)
+        metrics = evaluate_metrics(model, val_loader, num_classes=args.num_classes, device=device, use_amp=use_amp)
 
         # Step scheduler after each epoch
         scheduler.step()
         current_lr = scheduler.get_last_lr()[0]
+        epoch_sec = time.perf_counter() - epoch_t0
+        total_hours = (time.perf_counter() - train_start) / 3600.0
 
         score = metrics["combined_score"]
 
@@ -423,7 +473,7 @@ def main() -> None:
                 f"Epoch {epoch:03d}/{args.epochs} | "
                 f"train_loss={train_loss:.4f} val_loss={val_loss:.4f} | "
                 f"dice={metrics['mean_dice_fg']:.4f} iou={metrics['mean_iou_fg']:.4f} "
-                f"combined={score:.4f} | lr={current_lr:.2e} | ** BEST ** (saved)"
+                f"combined={score:.4f} | lr={current_lr:.2e} | epoch={epoch_sec:.1f}s total={total_hours:.2f}h | ** BEST ** (saved)"
             )
         else:
             epochs_no_improve += 1
@@ -431,7 +481,7 @@ def main() -> None:
                 f"Epoch {epoch:03d}/{args.epochs} | "
                 f"train_loss={train_loss:.4f} val_loss={val_loss:.4f} | "
                 f"dice={metrics['mean_dice_fg']:.4f} iou={metrics['mean_iou_fg']:.4f} "
-                f"combined={score:.4f} | lr={current_lr:.2e}"
+                f"combined={score:.4f} | lr={current_lr:.2e} | epoch={epoch_sec:.1f}s total={total_hours:.2f}h"
             )
 
         # Early stopping

@@ -1,0 +1,132 @@
+[
+  {
+    "train": [
+      "topcow_ct_001",
+      "topcow_ct_002",
+      "topcow_ct_003",
+      "topcow_ct_004",
+      "topcow_ct_005",
+      "topcow_ct_006",
+      "topcow_ct_007",
+      "topcow_ct_012",
+      "topcow_ct_013",
+      "topcow_ct_016",
+      "topcow_ct_017",
+      "topcow_ct_020",
+      "topcow_ct_024",
+      "topcow_ct_025",
+      "topcow_ct_026",
+      "topcow_ct_023"
+    ],
+    "val": [
+      "topcow_ct_008",
+      "topcow_ct_015",
+      "topcow_ct_027",
+      "topcow_ct_010"
+    ]
+  },
+  {
+    "train": [
+      "topcow_ct_001",
+      "topcow_ct_002",
+      "topcow_ct_003",
+      "topcow_ct_004",
+      "topcow_ct_005",
+      "topcow_ct_006",
+      "topcow_ct_008",
+      "topcow_ct_012",
+      "topcow_ct_015",
+      "topcow_ct_017",
+      "topcow_ct_020",
+      "topcow_ct_023",
+      "topcow_ct_024",
+      "topcow_ct_026",
+      "topcow_ct_027",
+      "topcow_ct_025"
+    ],
+    "val": [
+      "topcow_ct_007",
+      "topcow_ct_013",
+      "topcow_ct_016",
+      "topcow_ct_010"
+    ]
+  },
+  {
+    "train": [
+      "topcow_ct_001",
+      "topcow_ct_003",
+      "topcow_ct_005",
+      "topcow_ct_006",
+      "topcow_ct_007",
+      "topcow_ct_008",
+      "topcow_ct_013",
+      "topcow_ct_015",
+      "topcow_ct_016",
+      "topcow_ct_017",
+      "topcow_ct_023",
+      "topcow_ct_024",
+      "topcow_ct_025",
+      "topcow_ct_026",
+      "topcow_ct_027",
+      "topcow_ct_004"
+    ],
+    "val": [
+      "topcow_ct_002",
+      "topcow_ct_012",
+      "topcow_ct_020",
+      "topcow_ct_010"
+    ]
+  },
+  {
+    "train": [
+      "topcow_ct_001",
+      "topcow_ct_002",
+      "topcow_ct_004",
+      "topcow_ct_006",
+      "topcow_ct_007",
+      "topcow_ct_008",
+      "topcow_ct_012",
+      "topcow_ct_013",
+      "topcow_ct_015",
+      "topcow_ct_016",
+      "topcow_ct_020",
+      "topcow_ct_023",
+      "topcow_ct_025",
+      "topcow_ct_026",
+      "topcow_ct_027",
+      "topcow_ct_003"
+    ],
+    "val": [
+      "topcow_ct_005",
+      "topcow_ct_017",
+      "topcow_ct_024",
+      "topcow_ct_010"
+    ]
+  },
+  {
+    "train": [
+      "topcow_ct_002",
+      "topcow_ct_003",
+      "topcow_ct_004",
+      "topcow_ct_005",
+      "topcow_ct_007",
+      "topcow_ct_008",
+      "topcow_ct_012",
+      "topcow_ct_013",
+      "topcow_ct_015",
+      "topcow_ct_016",
+      "topcow_ct_017",
+      "topcow_ct_020",
+      "topcow_ct_023",
+      "topcow_ct_025",
+      "topcow_ct_027",
+      "topcow_ct_026"
+    ],
+    "val": [
+      "topcow_ct_001",
+      "topcow_ct_006",
+      "topcow_ct_010",
+      "topcow_ct_024"
+    ]
+  }
+]

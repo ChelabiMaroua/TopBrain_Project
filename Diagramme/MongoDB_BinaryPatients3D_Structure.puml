@@ -1,0 +1,54 @@
+@startuml
+title MongoDB Document Structure - MultiClassPatients3D_Binary_CTA41
+
+skinparam shadowing false
+skinparam roundCorner 15
+skinparam defaultFontName Arial
+
+!define LEVEL1 #D4EDDA
+!define LEVEL2 #E8F0FE
+!define LEVEL3 #FFF4E5
+!define LEVEL4 #FDECEF
+
+node "<b>Collection: MultiClassPatients3D_Binary_CTA41</b>" as Coll #white {
+
+  object "<b>Root Document</b>" as Root LEVEL1 {
+    patient_id : "topcow_ct_001"
+    target_size : "128x128x64"
+    shape : [128, 128, 64]
+  }
+
+  object "<b>Type Metadata</b>" as Types LEVEL2 {
+    img_dtype : "float32"
+    lbl_dtype : "int64"
+  }
+
+  object "<b>Binary Payload</b>" as Payload LEVEL3 {
+    img_data : <BinData>
+    lbl_data : <BinData>
+  }
+
+  object "<b>Quality Control</b>" as QC LEVEL4 {
+    qc.dimensions_valid : bool
+    qc.normalization_in_0_1 : bool
+    qc.label_binarized : bool
+  }
+
+  object "<b>Source Paths</b>" as Paths LEVEL2 {
+    img_path : ".../imagesTr_topbrain_ct/..."
+    lbl_path : ".../labelsTr_topbrain_ct/..."
+    etl_loaded_at : "YYYY-MM-DD HH:mm:ss"
+  }
+}
+
+Root *-- Types
+Root *-- Payload
+Root *-- QC
+Root *-- Paths
+
+note bottom of Payload
+Chaque document = 1 volume 3D complet
+Labels multi-classes attendus: 0..40
+end note
+
+@enduml
