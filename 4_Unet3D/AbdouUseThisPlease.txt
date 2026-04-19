@@ -1,0 +1,21 @@
+python .\4_Unet3D\train_unet3d_binary.py `
+    --db-name "TopBrain_DB" `
+    --collection "Stage2_Cropped_4C" `
+    --target-size "stage2_cropped_4c" `
+    --partition-file ".\3_Data_Partitionement\partition_materialized.json" `
+    --save-dir ".\4_Unet3D\checkpoints\results_stage2_4c_TITAN" `
+    --num-classes 5 `
+    --swin-feature-size 48 `
+    --patch-size 128 128 128 `
+    --batch-size 2 `
+    --accum-steps 4 `
+    --patches-per-volume 4 `
+    --train-fg-oversample-prob 0.85 `
+    --lr 1e-4 `
+    --epochs 600 `
+    --early-stopping 200 `
+    --sw-overlap 0.6 `
+    --sw-mode "gaussian" `
+    --augment `
+    --amp `
+    --num-workers 8

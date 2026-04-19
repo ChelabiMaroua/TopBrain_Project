@@ -1,0 +1,20 @@
+commande exeuction : 
+python 4_Unet2D/train_unet2d_compare.py `
+  --partition-file "3_Data_Partitionement\partition_materialized.json" `
+  --image-dir "TopBrain_Data_Release_Batches1n2_081425\TopBrain_Data_Release_Batches1n2_081425\imagesTr_topbrain_ct" `
+  --label-dir "TopBrain_Data_Release_Batches1n2_081425\TopBrain_Data_Release_Batches1n2_081425\labelsTr_topbrain_ct" `
+  --strategy directfiles `
+  --fold fold_1 `
+  --loss dicefocal `
+  --focal-gamma 2.0 `
+  --background-weight-scale 0.02 `
+  --sampling-mode class-aware `
+  --foreground-boost 10.0 `
+  --base-channels 64 `
+  --lr 1e-4 `
+  --batch-size 4 `
+  --train-patch-size 96 `
+  --fg-center-prob 0.85 `
+  --dropblock-prob 0.10 `
+  --dropblock-size 5 `
+  --epochs 150
