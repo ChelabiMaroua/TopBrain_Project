@@ -1,0 +1,802 @@
+[
+  {
+    "patient_id": "001",
+    "patient_norm_id": "001",
+    "image_path": "C:\\Study\\Maroua\\TopBrain_Project\\TopBrain_Stage2_Cropped_4C\\imagesTr_stage2\\topbrain_ct_001_0000.nii.gz",
+    "label_path": "C:\\Study\\Maroua\\TopBrain_Project\\TopBrain_Stage2_Cropped_4C\\labelsTr_stage2_4c\\topbrain_ct_001.nii.gz",
+    "binary_mask_path": "C:\\Study\\Maroua\\TopBrain_Project\\nnUNet_raw\\Dataset001_TopBrain\\labelsTr\\topcow_ct_001.nii.gz",
+    "orig_shape": [
+      284,
+      327,
+      243
+    ],
+    "crop_shape": [
+      197,
+      324,
+      239
+    ],
+    "bbox_xyz": {
+      "x_min": 5,
+      "x_max": 201,
+      "y_min": 2,
+      "y_max": 325,
+      "z_min": 0,
+      "z_max": 238
+    },
+    "label_hist_4c": {
+      "0": 15175715,
+      "1": 25524,
+      "2": 17819,
+      "3": 3057,
+      "4": 32777
+    }
+  },
+  {
+    "patient_id": "002",
+    "patient_norm_id": "002",
+    "image_path": "C:\\Study\\Maroua\\TopBrain_Project\\TopBrain_Stage2_Cropped_4C\\imagesTr_stage2\\topbrain_ct_002_0000.nii.gz",
+    "label_path": "C:\\Study\\Maroua\\TopBrain_Project\\TopBrain_Stage2_Cropped_4C\\labelsTr_stage2_4c\\topbrain_ct_002.nii.gz",
+    "binary_mask_path": "C:\\Study\\Maroua\\TopBrain_Project\\nnUNet_raw\\Dataset001_TopBrain\\labelsTr\\topcow_ct_002.nii.gz",
+    "orig_shape": [
+      289,
+      347,
+      203
+    ],
+    "crop_shape": [
+      271,
+      333,
+      200
+    ],
+    "bbox_xyz": {
+      "x_min": 8,
+      "x_max": 278,
+      "y_min": 6,
+      "y_max": 338,
+      "z_min": 0,
+      "z_max": 199
+    },
+    "label_hist_4c": {
+      "0": 17951307,
+      "1": 26554,
+      "2": 14627,
+      "3": 12097,
+      "4": 44015
+    }
+  },
+  {
+    "patient_id": "003",
+    "patient_norm_id": "003",
+    "image_path": "C:\\Study\\Maroua\\TopBrain_Project\\TopBrain_Stage2_Cropped_4C\\imagesTr_stage2\\topbrain_ct_003_0000.nii.gz",
+    "label_path": "C:\\Study\\Maroua\\TopBrain_Project\\TopBrain_Stage2_Cropped_4C\\labelsTr_stage2_4c\\topbrain_ct_003.nii.gz",
+    "binary_mask_path": "C:\\Study\\Maroua\\TopBrain_Project\\nnUNet_raw\\Dataset001_TopBrain\\labelsTr\\topcow_ct_003.nii.gz",
+    "orig_shape": [
+      281,
+      313,
+      182
+    ],
+    "crop_shape": [
+      277,
+      282,
+      181
+    ],
+    "bbox_xyz": {
+      "x_min": 3,
+      "x_max": 279,
+      "y_min": 0,
+      "y_max": 281,
+      "z_min": 0,
+      "z_max": 180
+    },
+    "label_hist_4c": {
+      "0": 14084518,
+      "1": 20821,
+      "2": 11463,
+      "3": 8471,
+      "4": 13361
+    }
+  },
+  {
+    "patient_id": "004",
+    "patient_norm_id": "004",
+    "image_path": "C:\\Study\\Maroua\\TopBrain_Project\\TopBrain_Stage2_Cropped_4C\\imagesTr_stage2\\topbrain_ct_004_0000.nii.gz",
+    "label_path": "C:\\Study\\Maroua\\TopBrain_Project\\TopBrain_Stage2_Cropped_4C\\labelsTr_stage2_4c\\topbrain_ct_004.nii.gz",
+    "binary_mask_path": "C:\\Study\\Maroua\\TopBrain_Project\\nnUNet_raw\\Dataset001_TopBrain\\labelsTr\\topcow_ct_004.nii.gz",
+    "orig_shape": [
+      351,
+      431,
+      224
+    ],
+    "crop_shape": [
+      322,
+      410,
+      222
+    ],
+    "bbox_xyz": {
+      "x_min": 12,
+      "x_max": 333,
+      "y_min": 12,
+      "y_max": 421,
+      "z_min": 0,
+      "z_max": 221
+    },
+    "label_hist_4c": {
+      "0": 29179334,
+      "1": 43213,
+      "2": 18933,
+      "3": 15749,
+      "4": 51211
+    }
+  },
+  {
+    "patient_id": "005",
+    "patient_norm_id": "005",
+    "image_path": "C:\\Study\\Maroua\\TopBrain_Project\\TopBrain_Stage2_Cropped_4C\\imagesTr_stage2\\topbrain_ct_005_0000.nii.gz",
+    "label_path": "C:\\Study\\Maroua\\TopBrain_Project\\TopBrain_Stage2_Cropped_4C\\labelsTr_stage2_4c\\topbrain_ct_005.nii.gz",
+    "binary_mask_path": "C:\\Study\\Maroua\\TopBrain_Project\\nnUNet_raw\\Dataset001_TopBrain\\labelsTr\\topcow_ct_005.nii.gz",
+    "orig_shape": [
+      332,
+      417,
+      184
+    ],
+    "crop_shape": [
+      304,
+      400,
+      180
+    ],
+    "bbox_xyz": {
+      "x_min": 11,
+      "x_max": 314,
+      "y_min": 6,
+      "y_max": 405,
+      "z_min": 0,
+      "z_max": 179
+    },
+    "label_hist_4c": {
+      "0": 21772944,
+      "1": 30005,
+      "2": 22278,
+      "3": 19780,
+      "4": 42993
+    }
+  },
+  {
+    "patient_id": "006",
+    "patient_norm_id": "006",
+    "image_path": "C:\\Study\\Maroua\\TopBrain_Project\\TopBrain_Stage2_Cropped_4C\\imagesTr_stage2\\topbrain_ct_006_0000.nii.gz",
+    "label_path": "C:\\Study\\Maroua\\TopBrain_Project\\TopBrain_Stage2_Cropped_4C\\labelsTr_stage2_4c\\topbrain_ct_006.nii.gz",
+    "binary_mask_path": "C:\\Study\\Maroua\\TopBrain_Project\\nnUNet_raw\\Dataset001_TopBrain\\labelsTr\\topcow_ct_006.nii.gz",
+    "orig_shape": [
+      286,
+      369,
+      216
+    ],
+    "crop_shape": [
+      270,
+      346,
+      212
+    ],
+    "bbox_xyz": {
+      "x_min": 13,
+      "x_max": 282,
+      "y_min": 7,
+      "y_max": 352,
+      "z_min": 0,
+      "z_max": 211
+    },
+    "label_hist_4c": {
+      "0": 19752641,
+      "1": 15835,
+      "2": 7887,
+      "3": 6757,
+      "4": 21920
+    }
+  },
+  {
+    "patient_id": "007",
+    "patient_norm_id": "007",
+    "image_path": "C:\\Study\\Maroua\\TopBrain_Project\\TopBrain_Stage2_Cropped_4C\\imagesTr_stage2\\topbrain_ct_007_0000.nii.gz",
+    "label_path": "C:\\Study\\Maroua\\TopBrain_Project\\TopBrain_Stage2_Cropped_4C\\labelsTr_stage2_4c\\topbrain_ct_007.nii.gz",
+    "binary_mask_path": "C:\\Study\\Maroua\\TopBrain_Project\\nnUNet_raw\\Dataset001_TopBrain\\labelsTr\\topcow_ct_007.nii.gz",
+    "orig_shape": [
+      258,
+      321,
+      208
+    ],
+    "crop_shape": [
+      233,
+      263,
+      206
+    ],
+    "bbox_xyz": {
+      "x_min": 15,
+      "x_max": 247,
+      "y_min": 2,
+      "y_max": 264,
+      "z_min": 0,
+      "z_max": 205
+    },
+    "label_hist_4c": {
+      "0": 12570472,
+      "1": 17763,
+      "2": 9685,
+      "3": 10091,
+      "4": 15463
+    }
+  },
+  {
+    "patient_id": "008",
+    "patient_norm_id": "008",
+    "image_path": "C:\\Study\\Maroua\\TopBrain_Project\\TopBrain_Stage2_Cropped_4C\\imagesTr_stage2\\topbrain_ct_008_0000.nii.gz",
+    "label_path": "C:\\Study\\Maroua\\TopBrain_Project\\TopBrain_Stage2_Cropped_4C\\labelsTr_stage2_4c\\topbrain_ct_008.nii.gz",
+    "binary_mask_path": "C:\\Study\\Maroua\\TopBrain_Project\\nnUNet_raw\\Dataset001_TopBrain\\labelsTr\\topcow_ct_008.nii.gz",
+    "orig_shape": [
+      270,
+      338,
+      204
+    ],
+    "crop_shape": [
+      237,
+      299,
+      203
+    ],
+    "bbox_xyz": {
+      "x_min": 17,
+      "x_max": 253,
+      "y_min": 4,
+      "y_max": 302,
+      "z_min": 0,
+      "z_max": 202
+    },
+    "label_hist_4c": {
+      "0": 14336105,
+      "1": 14879,
+      "2": 7732,
+      "3": 6012,
+      "4": 20461
+    }
+  },
+  {
+    "patient_id": "010",
+    "patient_norm_id": "010",
+    "image_path": "C:\\Study\\Maroua\\TopBrain_Project\\TopBrain_Stage2_Cropped_4C\\imagesTr_stage2\\topbrain_ct_010_0000.nii.gz",
+    "label_path": "C:\\Study\\Maroua\\TopBrain_Project\\TopBrain_Stage2_Cropped_4C\\labelsTr_stage2_4c\\topbrain_ct_010.nii.gz",
+    "binary_mask_path": "C:\\Study\\Maroua\\TopBrain_Project\\nnUNet_raw\\Dataset001_TopBrain\\labelsTr\\topcow_ct_010.nii.gz",
+    "orig_shape": [
+      295,
+      386,
+      196
+    ],
+    "crop_shape": [
+      206,
+      307,
+      192
+    ],
+    "bbox_xyz": {
+      "x_min": 77,
+      "x_max": 282,
+      "y_min": 16,
+      "y_max": 322,
+      "z_min": 0,
+      "z_max": 191
+    },
+    "label_hist_4c": {
+      "0": 12088508,
+      "1": 21436,
+      "2": 5569,
+      "3": 11151,
+      "4": 15800
+    }
+  },
+  {
+    "patient_id": "011",
+    "patient_norm_id": "011",
+    "image_path": "C:\\Study\\Maroua\\TopBrain_Project\\TopBrain_Stage2_Cropped_4C\\imagesTr_stage2\\topbrain_ct_011_0000.nii.gz",
+    "label_path": "C:\\Study\\Maroua\\TopBrain_Project\\TopBrain_Stage2_Cropped_4C\\labelsTr_stage2_4c\\topbrain_ct_011.nii.gz",
+    "binary_mask_path": "C:\\Study\\Maroua\\TopBrain_Project\\nnUNet_raw\\Dataset001_TopBrain\\labelsTr\\topcow_ct_011.nii.gz",
+    "orig_shape": [
+      269,
+      334,
+      295
+    ],
+    "crop_shape": [
+      252,
+      310,
+      288
+    ],
+    "bbox_xyz": {
+      "x_min": 7,
+      "x_max": 258,
+      "y_min": 16,
+      "y_max": 325,
+      "z_min": 0,
+      "z_max": 287
+    },
+    "label_hist_4c": {
+      "0": 22388250,
+      "1": 19603,
+      "2": 15340,
+      "3": 15680,
+      "4": 59687
+    }
+  },
+  {
+    "patient_id": "012",
+    "patient_norm_id": "012",
+    "image_path": "C:\\Study\\Maroua\\TopBrain_Project\\TopBrain_Stage2_Cropped_4C\\imagesTr_stage2\\topbrain_ct_012_0000.nii.gz",
+    "label_path": "C:\\Study\\Maroua\\TopBrain_Project\\TopBrain_Stage2_Cropped_4C\\labelsTr_stage2_4c\\topbrain_ct_012.nii.gz",
+    "binary_mask_path": "C:\\Study\\Maroua\\TopBrain_Project\\nnUNet_raw\\Dataset001_TopBrain\\labelsTr\\topcow_ct_012.nii.gz",
+    "orig_shape": [
+      266,
+      371,
+      311
+    ],
+    "crop_shape": [
+      251,
+      362,
+      307
+    ],
+    "bbox_xyz": {
+      "x_min": 9,
+      "x_max": 259,
+      "y_min": 4,
+      "y_max": 365,
+      "z_min": 0,
+      "z_max": 306
+    },
+    "label_hist_4c": {
+      "0": 27751143,
+      "1": 26794,
+      "2": 21785,
+      "3": 20103,
+      "4": 74809
+    }
+  },
+  {
+    "patient_id": "013",
+    "patient_norm_id": "013",
+    "image_path": "C:\\Study\\Maroua\\TopBrain_Project\\TopBrain_Stage2_Cropped_4C\\imagesTr_stage2\\topbrain_ct_013_0000.nii.gz",
+    "label_path": "C:\\Study\\Maroua\\TopBrain_Project\\TopBrain_Stage2_Cropped_4C\\labelsTr_stage2_4c\\topbrain_ct_013.nii.gz",
+    "binary_mask_path": "C:\\Study\\Maroua\\TopBrain_Project\\nnUNet_raw\\Dataset001_TopBrain\\labelsTr\\topcow_ct_013.nii.gz",
+    "orig_shape": [
+      326,
+      433,
+      168
+    ],
+    "crop_shape": [
+      291,
+      410,
+      168
+    ],
+    "bbox_xyz": {
+      "x_min": 16,
+      "x_max": 306,
+      "y_min": 8,
+      "y_max": 417,
+      "z_min": 0,
+      "z_max": 167
+    },
+    "label_hist_4c": {
+      "0": 19964438,
+      "1": 24496,
+      "2": 10967,
+      "3": 10958,
+      "4": 33221
+    }
+  },
+  {
+    "patient_id": "014",
+    "patient_norm_id": "014",
+    "image_path": "C:\\Study\\Maroua\\TopBrain_Project\\TopBrain_Stage2_Cropped_4C\\imagesTr_stage2\\topbrain_ct_014_0000.nii.gz",
+    "label_path": "C:\\Study\\Maroua\\TopBrain_Project\\TopBrain_Stage2_Cropped_4C\\labelsTr_stage2_4c\\topbrain_ct_014.nii.gz",
+    "binary_mask_path": "C:\\Study\\Maroua\\TopBrain_Project\\nnUNet_raw\\Dataset001_TopBrain\\labelsTr\\topcow_ct_014.nii.gz",
+    "orig_shape": [
+      247,
+      328,
+      211
+    ],
+    "crop_shape": [
+      232,
+      310,
+      208
+    ],
+    "bbox_xyz": {
+      "x_min": 2,
+      "x_max": 233,
+      "y_min": 10,
+      "y_max": 319,
+      "z_min": 0,
+      "z_max": 207
+    },
+    "label_hist_4c": {
+      "0": 14889241,
+      "1": 20169,
+      "2": 8979,
+      "3": 10117,
+      "4": 30854
+    }
+  },
+  {
+    "patient_id": "015",
+    "patient_norm_id": "015",
+    "image_path": "C:\\Study\\Maroua\\TopBrain_Project\\TopBrain_Stage2_Cropped_4C\\imagesTr_stage2\\topbrain_ct_015_0000.nii.gz",
+    "label_path": "C:\\Study\\Maroua\\TopBrain_Project\\TopBrain_Stage2_Cropped_4C\\labelsTr_stage2_4c\\topbrain_ct_015.nii.gz",
+    "binary_mask_path": "C:\\Study\\Maroua\\TopBrain_Project\\nnUNet_raw\\Dataset001_TopBrain\\labelsTr\\topcow_ct_015.nii.gz",
+    "orig_shape": [
+      316,
+      390,
+      203
+    ],
+    "crop_shape": [
+      303,
+      312,
+      200
+    ],
+    "bbox_xyz": {
+      "x_min": 6,
+      "x_max": 308,
+      "y_min": 9,
+      "y_max": 320,
+      "z_min": 0,
+      "z_max": 199
+    },
+    "label_hist_4c": {
+      "0": 18837212,
+      "1": 36784,
+      "2": 13962,
+      "3": 14491,
+      "4": 4751
+    }
+  },
+  {
+    "patient_id": "016",
+    "patient_norm_id": "016",
+    "image_path": "C:\\Study\\Maroua\\TopBrain_Project\\TopBrain_Stage2_Cropped_4C\\imagesTr_stage2\\topbrain_ct_016_0000.nii.gz",
+    "label_path": "C:\\Study\\Maroua\\TopBrain_Project\\TopBrain_Stage2_Cropped_4C\\labelsTr_stage2_4c\\topbrain_ct_016.nii.gz",
+    "binary_mask_path": "C:\\Study\\Maroua\\TopBrain_Project\\nnUNet_raw\\Dataset001_TopBrain\\labelsTr\\topcow_ct_016.nii.gz",
+    "orig_shape": [
+      306,
+      365,
+      182
+    ],
+    "crop_shape": [
+      282,
+      273,
+      177
+    ],
+    "bbox_xyz": {
+      "x_min": 15,
+      "x_max": 296,
+      "y_min": 9,
+      "y_max": 281,
+      "z_min": 0,
+      "z_max": 176
+    },
+    "label_hist_4c": {
+      "0": 13574176,
+      "1": 19595,
+      "2": 10245,
+      "3": 10504,
+      "4": 12002
+    }
+  },
+  {
+    "patient_id": "017",
+    "patient_norm_id": "017",
+    "image_path": "C:\\Study\\Maroua\\TopBrain_Project\\TopBrain_Stage2_Cropped_4C\\imagesTr_stage2\\topbrain_ct_017_0000.nii.gz",
+    "label_path": "C:\\Study\\Maroua\\TopBrain_Project\\TopBrain_Stage2_Cropped_4C\\labelsTr_stage2_4c\\topbrain_ct_017.nii.gz",
+    "binary_mask_path": "C:\\Study\\Maroua\\TopBrain_Project\\nnUNet_raw\\Dataset001_TopBrain\\labelsTr\\topcow_ct_017.nii.gz",
+    "orig_shape": [
+      319,
+      430,
+      527
+    ],
+    "crop_shape": [
+      298,
+      413,
+      508
+    ],
+    "bbox_xyz": {
+      "x_min": 10,
+      "x_max": 307,
+      "y_min": 7,
+      "y_max": 419,
+      "z_min": 0,
+      "z_max": 507
+    },
+    "label_hist_4c": {
+      "0": 62289032,
+      "1": 57162,
+      "2": 30185,
+      "3": 22843,
+      "4": 122370
+    }
+  },
+  {
+    "patient_id": "018",
+    "patient_norm_id": "018",
+    "image_path": "C:\\Study\\Maroua\\TopBrain_Project\\TopBrain_Stage2_Cropped_4C\\imagesTr_stage2\\topbrain_ct_018_0000.nii.gz",
+    "label_path": "C:\\Study\\Maroua\\TopBrain_Project\\TopBrain_Stage2_Cropped_4C\\labelsTr_stage2_4c\\topbrain_ct_018.nii.gz",
+    "binary_mask_path": "C:\\Study\\Maroua\\TopBrain_Project\\nnUNet_raw\\Dataset001_TopBrain\\labelsTr\\topcow_ct_018.nii.gz",
+    "orig_shape": [
+      286,
+      379,
+      202
+    ],
+    "crop_shape": [
+      261,
+      323,
+      196
+    ],
+    "bbox_xyz": {
+      "x_min": 17,
+      "x_max": 277,
+      "y_min": 5,
+      "y_max": 327,
+      "z_min": 0,
+      "z_max": 195
+    },
+    "label_hist_4c": {
+      "0": 16459709,
+      "1": 20215,
+      "2": 12518,
+      "3": 12219,
+      "4": 18727
+    }
+  },
+  {
+    "patient_id": "020",
+    "patient_norm_id": "020",
+    "image_path": "C:\\Study\\Maroua\\TopBrain_Project\\TopBrain_Stage2_Cropped_4C\\imagesTr_stage2\\topbrain_ct_020_0000.nii.gz",
+    "label_path": "C:\\Study\\Maroua\\TopBrain_Project\\TopBrain_Stage2_Cropped_4C\\labelsTr_stage2_4c\\topbrain_ct_020.nii.gz",
+    "binary_mask_path": "C:\\Study\\Maroua\\TopBrain_Project\\nnUNet_raw\\Dataset001_TopBrain\\labelsTr\\topcow_ct_020.nii.gz",
+    "orig_shape": [
+      290,
+      387,
+      200
+    ],
+    "crop_shape": [
+      279,
+      372,
+      200
+    ],
+    "bbox_xyz": {
+      "x_min": 4,
+      "x_max": 282,
+      "y_min": 5,
+      "y_max": 376,
+      "z_min": 0,
+      "z_max": 199
+    },
+    "label_hist_4c": {
+      "0": 20678134,
+      "1": 24120,
+      "2": 11145,
+      "3": 10605,
+      "4": 33596
+    }
+  },
+  {
+    "patient_id": "021",
+    "patient_norm_id": "021",
+    "image_path": "C:\\Study\\Maroua\\TopBrain_Project\\TopBrain_Stage2_Cropped_4C\\imagesTr_stage2\\topbrain_ct_021_0000.nii.gz",
+    "label_path": "C:\\Study\\Maroua\\TopBrain_Project\\TopBrain_Stage2_Cropped_4C\\labelsTr_stage2_4c\\topbrain_ct_021.nii.gz",
+    "binary_mask_path": "C:\\Study\\Maroua\\TopBrain_Project\\nnUNet_raw\\Dataset001_TopBrain\\labelsTr\\topcow_ct_021.nii.gz",
+    "orig_shape": [
+      275,
+      345,
+      205
+    ],
+    "crop_shape": [
+      258,
+      335,
+      201
+    ],
+    "bbox_xyz": {
+      "x_min": 5,
+      "x_max": 262,
+      "y_min": 3,
+      "y_max": 337,
+      "z_min": 0,
+      "z_max": 200
+    },
+    "label_hist_4c": {
+      "0": 17272655,
+      "1": 24523,
+      "2": 18932,
+      "3": 19469,
+      "4": 36851
+    }
+  },
+  {
+    "patient_id": "022",
+    "patient_norm_id": "022",
+    "image_path": "C:\\Study\\Maroua\\TopBrain_Project\\TopBrain_Stage2_Cropped_4C\\imagesTr_stage2\\topbrain_ct_022_0000.nii.gz",
+    "label_path": "C:\\Study\\Maroua\\TopBrain_Project\\TopBrain_Stage2_Cropped_4C\\labelsTr_stage2_4c\\topbrain_ct_022.nii.gz",
+    "binary_mask_path": "C:\\Study\\Maroua\\TopBrain_Project\\nnUNet_raw\\Dataset001_TopBrain\\labelsTr\\topcow_ct_022.nii.gz",
+    "orig_shape": [
+      287,
+      351,
+      224
+    ],
+    "crop_shape": [
+      279,
+      334,
+      220
+    ],
+    "bbox_xyz": {
+      "x_min": 3,
+      "x_max": 281,
+      "y_min": 12,
+      "y_max": 345,
+      "z_min": 0,
+      "z_max": 219
+    },
+    "label_hist_4c": {
+      "0": 20383969,
+      "1": 31436,
+      "2": 24005,
+      "3": 21148,
+      "4": 40362
+    }
+  },
+  {
+    "patient_id": "023",
+    "patient_norm_id": "023",
+    "image_path": "C:\\Study\\Maroua\\TopBrain_Project\\TopBrain_Stage2_Cropped_4C\\imagesTr_stage2\\topbrain_ct_023_0000.nii.gz",
+    "label_path": "C:\\Study\\Maroua\\TopBrain_Project\\TopBrain_Stage2_Cropped_4C\\labelsTr_stage2_4c\\topbrain_ct_023.nii.gz",
+    "binary_mask_path": "C:\\Study\\Maroua\\TopBrain_Project\\nnUNet_raw\\Dataset001_TopBrain\\labelsTr\\topcow_ct_023.nii.gz",
+    "orig_shape": [
+      338,
+      396,
+      204
+    ],
+    "crop_shape": [
+      311,
+      373,
+      202
+    ],
+    "bbox_xyz": {
+      "x_min": 11,
+      "x_max": 321,
+      "y_min": 2,
+      "y_max": 374,
+      "z_min": 0,
+      "z_max": 201
+    },
+    "label_hist_4c": {
+      "0": 23355947,
+      "1": 19519,
+      "2": 14079,
+      "3": 11932,
+      "4": 31129
+    }
+  },
+  {
+    "patient_id": "024",
+    "patient_norm_id": "024",
+    "image_path": "C:\\Study\\Maroua\\TopBrain_Project\\TopBrain_Stage2_Cropped_4C\\imagesTr_stage2\\topbrain_ct_024_0000.nii.gz",
+    "label_path": "C:\\Study\\Maroua\\TopBrain_Project\\TopBrain_Stage2_Cropped_4C\\labelsTr_stage2_4c\\topbrain_ct_024.nii.gz",
+    "binary_mask_path": "C:\\Study\\Maroua\\TopBrain_Project\\nnUNet_raw\\Dataset001_TopBrain\\labelsTr\\topcow_ct_024.nii.gz",
+    "orig_shape": [
+      300,
+      366,
+      223
+    ],
+    "crop_shape": [
+      267,
+      339,
+      220
+    ],
+    "bbox_xyz": {
+      "x_min": 16,
+      "x_max": 282,
+      "y_min": 18,
+      "y_max": 356,
+      "z_min": 0,
+      "z_max": 219
+    },
+    "label_hist_4c": {
+      "0": 19819052,
+      "1": 17587,
+      "2": 12187,
+      "3": 7993,
+      "4": 56041
+    }
+  },
+  {
+    "patient_id": "025",
+    "patient_norm_id": "025",
+    "image_path": "C:\\Study\\Maroua\\TopBrain_Project\\TopBrain_Stage2_Cropped_4C\\imagesTr_stage2\\topbrain_ct_025_0000.nii.gz",
+    "label_path": "C:\\Study\\Maroua\\TopBrain_Project\\TopBrain_Stage2_Cropped_4C\\labelsTr_stage2_4c\\topbrain_ct_025.nii.gz",
+    "binary_mask_path": "C:\\Study\\Maroua\\TopBrain_Project\\nnUNet_raw\\Dataset001_TopBrain\\labelsTr\\topcow_ct_025.nii.gz",
+    "orig_shape": [
+      271,
+      340,
+      206
+    ],
+    "crop_shape": [
+      256,
+      328,
+      203
+    ],
+    "bbox_xyz": {
+      "x_min": 4,
+      "x_max": 259,
+      "y_min": 5,
+      "y_max": 332,
+      "z_min": 0,
+      "z_max": 202
+    },
+    "label_hist_4c": {
+      "0": 16970510,
+      "1": 22542,
+      "2": 12480,
+      "3": 12925,
+      "4": 27047
+    }
+  },
+  {
+    "patient_id": "026",
+    "patient_norm_id": "026",
+    "image_path": "C:\\Study\\Maroua\\TopBrain_Project\\TopBrain_Stage2_Cropped_4C\\imagesTr_stage2\\topbrain_ct_026_0000.nii.gz",
+    "label_path": "C:\\Study\\Maroua\\TopBrain_Project\\TopBrain_Stage2_Cropped_4C\\labelsTr_stage2_4c\\topbrain_ct_026.nii.gz",
+    "binary_mask_path": "C:\\Study\\Maroua\\TopBrain_Project\\nnUNet_raw\\Dataset001_TopBrain\\labelsTr\\topcow_ct_026.nii.gz",
+    "orig_shape": [
+      274,
+      316,
+      214
+    ],
+    "crop_shape": [
+      261,
+      305,
+      210
+    ],
+    "bbox_xyz": {
+      "x_min": 7,
+      "x_max": 267,
+      "y_min": 5,
+      "y_max": 309,
+      "z_min": 0,
+      "z_max": 209
+    },
+    "label_hist_4c": {
+      "0": 16623932,
+      "1": 23461,
+      "2": 13055,
+      "3": 12158,
+      "4": 44444
+    }
+  },
+  {
+    "patient_id": "027",
+    "patient_norm_id": "027",
+    "image_path": "C:\\Study\\Maroua\\TopBrain_Project\\TopBrain_Stage2_Cropped_4C\\imagesTr_stage2\\topbrain_ct_027_0000.nii.gz",
+    "label_path": "C:\\Study\\Maroua\\TopBrain_Project\\TopBrain_Stage2_Cropped_4C\\labelsTr_stage2_4c\\topbrain_ct_027.nii.gz",
+    "binary_mask_path": "C:\\Study\\Maroua\\TopBrain_Project\\nnUNet_raw\\Dataset001_TopBrain\\labelsTr\\topcow_ct_027.nii.gz",
+    "orig_shape": [
+      275,
+      360,
+      212
+    ],
+    "crop_shape": [
+      254,
+      349,
+      209
+    ],
+    "bbox_xyz": {
+      "x_min": 7,
+      "x_max": 260,
+      "y_min": 5,
+      "y_max": 353,
+      "z_min": 0,
+      "z_max": 208
+    },
+    "label_hist_4c": {
+      "0": 18455137,
+      "1": 15528,
+      "2": 7419,
+      "3": 8777,
+      "4": 40153
+    }
+  }
+]

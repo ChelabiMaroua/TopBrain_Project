@@ -264,42 +264,44 @@ def run_epoch(
     if train_mode and optimizer is not None:
         optimizer.zero_grad(set_to_none=True)
 
-    for step_idx, (x, y) in enumerate(loader, start=1):
-        x = x.to(device, non_blocking=True)
-        y = y.to(device, non_blocking=True)
+    grad_context = torch.no_grad() if not train_mode else torch.enable_grad()
+    with grad_context:
+        for step_idx, (x, y) in enumerate(loader, start=1):
+            x = x.to(device, non_blocking=True)
+            y = y.to(device, non_blocking=True)
 
-        with torch.autocast(device_type=device.type, enabled=use_amp):
-            if train_mode:
-                logits = model(x)
-            else:
-                logits = sliding_window_inference(
-                    inputs=x,
-                    roi_size=roi_size,
-                    sw_batch_size=sw_batch_size,
-                    predictor=model,
-                    overlap=sw_overlap,
-                    mode=sw_mode,
-                )
-            raw_loss = criterion(logits, y)
-            loss = raw_loss / accum_steps if train_mode else raw_loss
-
-        if train_mode and optimizer is not None:
-            if scaler is not None and use_amp:
-                scaler.scale(loss).backward()
-            else:
-                loss.backward()
-
-            is_update_step = (step_idx % accum_steps == 0) or (step_idx == len(loader))
-            if is_update_step:
-                if scaler is not None and use_amp:
-                    scaler.step(optimizer)
-                    scaler.update()
+            with torch.autocast(device_type=device.type, enabled=use_amp):
+                if train_mode:
+                    logits = model(x)
                 else:
-                    optimizer.step()
-                optimizer.zero_grad(set_to_none=True)
+                    logits = sliding_window_inference(
+                        inputs=x,
+                        roi_size=roi_size,
+                        sw_batch_size=sw_batch_size,
+                        predictor=model,
+                        overlap=sw_overlap,
+                        mode=sw_mode,
+                    )
+                raw_loss = criterion(logits, y)
+                loss = raw_loss / accum_steps if train_mode else raw_loss
 
-        total += float(raw_loss.item())
-        count += 1
+            if train_mode and optimizer is not None:
+                if scaler is not None and use_amp:
+                    scaler.scale(loss).backward()
+                else:
+                    loss.backward()
+
+                is_update_step = (step_idx % accum_steps == 0) or (step_idx == len(loader))
+                if is_update_step:
+                    if scaler is not None and use_amp:
+                        scaler.step(optimizer)
+                        scaler.update()
+                    else:
+                        optimizer.step()
+                    optimizer.zero_grad(set_to_none=True)
+
+            total += float(raw_loss.item())
+            count += 1
 
     return total / max(1, count)
 
@@ -562,7 +564,13 @@ def main() -> None:
         patches_per_volume=args.patches_per_volume,
         foreground_oversample_prob=args.train_fg_oversample_prob,
     )
-    val_ds = BinaryMongoDataset(val_docs, num_classes=args.num_classes, augment=False)
+    val_ds = BinaryMongoDataset(
+        val_docs,
+        num_classes=args.num_classes,
+        augment=False,
+        patch_size=tuple(args.patch_size),
+        patches_per_volume=1,
+    )
 
     pin_memory = device.type == "cuda"
     persistent_workers = args.num_workers > 0
