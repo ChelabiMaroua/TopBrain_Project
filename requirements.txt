@@ -1,0 +1,11 @@
+numpy
+scipy
+matplotlib
+nibabel
+opencv-python
+pymongo
+python-dotenv
+torch
+monai
+tqdm
+scikit-learn

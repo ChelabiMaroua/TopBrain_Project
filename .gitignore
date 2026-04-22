@@ -20,6 +20,17 @@ logs/
 Graphs/
 Reconstruction/
 results/terminal_result.txt
+results/stage1_binary_masks/*.nii.gz
+results/stage1_binary_masks_test/*.nii.gz
+
+# Large nnUNet artifacts (local runs)
+nnUNet_raw/
+nnUNet_preprocessed/
+nnUNet_results/
+
+# Local training/media artifacts
+*.log
+*.tmp
 
 # Local MongoDB runtime/storage artifacts
 .mongo-data/
