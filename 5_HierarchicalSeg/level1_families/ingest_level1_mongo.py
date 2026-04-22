@@ -168,6 +168,56 @@ def load_mask_nifti(path: Path) -> np.ndarray:
     return arr
 
 
+def load_multiclass_label_target(
+    src_doc: Dict,
+    target_shape: Tuple[int, int, int],
+) -> Tuple[np.ndarray, Dict[str, object]]:
+    """
+    Load the authoritative 41-class label volume, remap it to 5 families,
+    then resize it to target_shape using nearest-neighbor interpolation.
+
+    Preferred source is lbl_path (native NIfTI on disk). We only fall back to
+    lbl_data when it still contains a genuine multiclass payload.
+    """
+    label_info: Dict[str, object] = {}
+
+    lbl_path_raw = src_doc.get("lbl_path")
+    if lbl_path_raw:
+        lbl_path = Path(str(lbl_path_raw))
+        if lbl_path.exists():
+            native_lbl = np.asarray(nib.load(str(lbl_path)).get_fdata(dtype=np.float32))
+            native_lbl = np.rint(native_lbl).astype(np.int64, copy=False)
+            remapped = remap_labels_to_families(native_lbl).astype(np.uint8, copy=False)
+            resized = resize_nearest_3d(remapped, target_shape).astype(np.uint8, copy=False)
+            label_info.update({
+                "label_source": "lbl_path",
+                "label_path": str(lbl_path),
+                "native_label_shape": list(native_lbl.shape),
+            })
+            return resized, label_info
+
+    if "lbl_data" not in src_doc:
+        raise ValueError("source doc lacks both lbl_path and lbl_data")
+
+    shape = infer_doc_shape(src_doc, default=target_shape)
+    lbl_dtype = np.dtype(src_doc.get("lbl_dtype", "int64"))
+    lbl_np = np.frombuffer(src_doc["lbl_data"], dtype=lbl_dtype).reshape(shape).astype(np.int64, copy=False)
+    unique_values = np.unique(lbl_np)
+    if unique_values.size <= 2 and int(unique_values.max(initial=0)) <= 1:
+        raise ValueError(
+            "lbl_data fallback is binary-only; authoritative multiclass labels are required via lbl_path"
+        )
+
+    remapped = remap_labels_to_families(lbl_np).astype(np.uint8, copy=False)
+    if remapped.shape != target_shape:
+        remapped = resize_nearest_3d(remapped, target_shape).astype(np.uint8, copy=False)
+    label_info.update({
+        "label_source": "lbl_data",
+        "native_label_shape": list(lbl_np.shape),
+    })
+    return remapped, label_info
+
+
 def load_manifest(manifest_path: Path) -> Dict[str, Dict]:
     """Return {patient_id_normalized: manifest_entry}."""
     with manifest_path.open("r", encoding="utf-8") as f:
@@ -205,10 +255,7 @@ def ingest_one_patient(
         return None, stats
 
     img_dtype = np.dtype(src_doc.get("img_dtype", "float32"))
-    lbl_dtype = np.dtype(src_doc.get("lbl_dtype", "int64"))
-
     img_bytes: bytes = bytes(src_doc["img_data"])  # kept raw for the new doc
-    lbl_np = np.frombuffer(src_doc["lbl_data"], dtype=lbl_dtype).reshape(shape)
 
     # -- 2. Load stage-1 mask (at NATIVE resolution), resize to target_size ---
     mask_path = Path(manifest_entry["mask_path"])
@@ -218,8 +265,18 @@ def ingest_one_patient(
     native_mask = load_mask_nifti(mask_path)
     resized_mask = resize_nearest_3d(native_mask, target_shape).astype(np.uint8, copy=False)
 
-    # -- 3. Remap 41-class labels to 5 families -------------------------------
-    fam_lbl = remap_labels_to_families(lbl_np).astype(np.uint8, copy=False)
+    # -- 3. Load authoritative 41-class labels, remap to 5 families ----------
+    fam_lbl, label_info = load_multiclass_label_target(src_doc, target_shape)
+    if fam_lbl.shape != shape or resized_mask.shape != shape:
+        stats["error"] = (
+            f"geometry mismatch: img={shape} lbl={fam_lbl.shape} mask={resized_mask.shape}"
+        )
+        return None, stats
+
+    unique_classes = np.unique(fam_lbl)
+    if not set(unique_classes.tolist()).issubset({0, 1, 2, 3, 4}):
+        stats["error"] = f"unexpected label ids after remap: {unique_classes.tolist()}"
+        return None, stats
 
     # -- 4. Sanity stats (cheap, computed once at ingestion) ------------------
     mask_fg = int(np.count_nonzero(resized_mask))
@@ -238,6 +295,8 @@ def ingest_one_patient(
         "label_fg_voxels": lbl_fg,
         "mask_recall_vs_gt": round(mask_recall, 6),
         "native_mask_shape": list(native_mask.shape),
+        "label_unique": [int(v) for v in unique_classes.tolist()],
+        **label_info,
     })
 
     # -- 5. Assemble destination doc ------------------------------------------
@@ -259,9 +318,27 @@ def ingest_one_patient(
             "stage1_mask_path": str(mask_path),
             "stage1_mask_fg_voxels": mask_fg,
             "stage1_mask_recall_vs_gt": round(mask_recall, 6),
+            "stage1_mask_threshold": manifest_entry.get("threshold"),
+            "label_source": label_info.get("label_source"),
+            "label_path": label_info.get("label_path"),
+            "native_label_shape": label_info.get("native_label_shape"),
         },
     }
     return doc, stats
+
+
+def compute_global_class_distribution(
+    coll: Collection,
+    target_size: str,
+) -> np.ndarray:
+    counts = np.zeros(NUM_FAMILIES, dtype=np.int64)
+    projection = {"_id": 0, "shape": 1, "lbl_data": 1, "lbl_dtype": 1}
+    for doc in coll.find({"target_size": target_size}, projection):
+        shape = tuple(int(v) for v in doc["shape"])
+        dtype = np.dtype(doc.get("lbl_dtype", "uint8"))
+        lbl = np.frombuffer(doc["lbl_data"], dtype=dtype).reshape(shape)
+        counts += np.bincount(lbl.ravel(), minlength=NUM_FAMILIES)[:NUM_FAMILIES]
+    return counts
 
 
 def ensure_dest_indexes(coll: Collection) -> None:
@@ -343,6 +420,7 @@ def main() -> None:
         "shape": 1,
         "img_dtype": 1,
         "lbl_dtype": 1,
+        "lbl_path": 1,
         "img_data": 1,
         "lbl_data": 1,
         "metadata": 1,
@@ -382,10 +460,10 @@ def main() -> None:
 
         # The source cursor projects only the fields we need; reload with the
         # full document only if img_data is missing (defensive).
-        if "img_data" not in src_doc or "lbl_data" not in src_doc:
+        if "img_data" not in src_doc:
             counts["errors"] += 1
-            stats_log.append({"patient_id": pid, "error": "src doc lacks img_data/lbl_data"})
-            print(f"[err ] {pid} — source doc missing binary payload")
+            stats_log.append({"patient_id": pid, "error": "src doc lacks img_data"})
+            print(f"[err ] {pid} — source doc missing img_data")
             continue
 
         try:
@@ -423,8 +501,19 @@ def main() -> None:
               f"mask_fg={st['mask_n0_fg_voxels']} lbl_fg={st['label_fg_voxels']} "
               f"recall={st['mask_recall_vs_gt']:.4f}")
 
-    client.close()
     elapsed = time.perf_counter() - t0
+
+    if not args.dry_run:
+        class_counts = compute_global_class_distribution(dst_coll, args.target_size)
+        class_freqs = class_counts / max(float(class_counts.sum()), 1.0)
+        print()
+        print(f"[QC] Class distribution: {class_counts.tolist()}")
+        print(f"[QC] Class frequencies: {[round(float(v), 6) for v in class_freqs.tolist()]}")
+        if not args.max_patients:
+            if not np.all(class_counts > 0):
+                raise RuntimeError(f"Classes vides dans la collection Level-1: {class_counts.tolist()}")
+
+    client.close()
 
     # Write report
     report_path = Path(args.report_path)

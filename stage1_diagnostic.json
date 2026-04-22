@@ -1,0 +1,62 @@
+{
+  "checkpoint": "4_Unet3D/checkpoints/stage1_binary_v2/swinunetr_best_fold_1.pth",
+  "threshold": 0.35,
+  "fold": "fold_1",
+  "n_patients": 4,
+  "per_patient": [
+    {
+      "patient_id": "008",
+      "fg_ratio": 0.0026035308837890625,
+      "recall": 0.7802197802197802,
+      "precision": 0.7460595446584939,
+      "dice": 0.7627573858549687,
+      "iou": 0.6164978292329957,
+      "gt_voxels": 2730,
+      "pred_voxels": 2855,
+      "tp": 2130,
+      "fp": 725,
+      "fn": 600
+    },
+    {
+      "patient_id": "015",
+      "fg_ratio": 0.0027265548706054688,
+      "recall": 0.7922350472193075,
+      "precision": 0.6504882251579552,
+      "dice": 0.7143983598801451,
+      "iou": 0.5556918547595682,
+      "gt_voxels": 2859,
+      "pred_voxels": 3482,
+      "tp": 2265,
+      "fp": 1217,
+      "fn": 594
+    },
+    {
+      "patient_id": "023",
+      "fg_ratio": 0.0027866363525390625,
+      "recall": 0.8015058179329226,
+      "precision": 0.7885521885521886,
+      "dice": 0.7949762389680923,
+      "iou": 0.6597183098591549,
+      "gt_voxels": 2922,
+      "pred_voxels": 2970,
+      "tp": 2342,
+      "fp": 628,
+      "fn": 580
+    },
+    {
+      "patient_id": "027",
+      "fg_ratio": 0.0033540725708007812,
+      "recall": 0.8299687233437589,
+      "precision": 0.8070223942493779,
+      "dice": 0.8183347350714887,
+      "iou": 0.6925266903914591,
+      "gt_voxels": 3517,
+      "pred_voxels": 3617,
+      "tp": 2919,
+      "fp": 698,
+      "fn": 598
+    }
+  ],
+  "verdict": "CAS 1 \u2014 LIMITE DE R\u00c9SOLUTION",
+  "explanation": "Distribution homog\u00e8ne (stdev=0.021, range=0.05). Le plafond de recall est structurel, passe au stage-2."
+}

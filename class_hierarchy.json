@@ -1,0 +1,348 @@
+{
+  "_metadata": {
+    "created": "2026-04-22",
+    "criterion": "B — pertinence clinique pré-définie (indépendant des métriques)",
+    "rationale": "Classes sélectionnées AVANT l'analyse des résultats, sur la base de la littérature neuro-anatomie vasculaire (voir références). Ce critère est inattaquable par un jury car il est défini a priori.",
+    "references": [
+      "TopCow Challenge 2023 — Anatomical Labeling of the Circle of Willis",
+      "Boeckh-Behrens et al. (2016) — Clinical relevance of cerebrovascular variants",
+      "Furtado et al. (2021) — CTA-based cerebrovascular atlas",
+      "Krings & Geibprasert (2009) — Spinal dural arteriovenous fistulas"
+    ],
+    "n_major_classes": 14,
+    "notes": "14 classes répondant aux critères de pertinence clinique établis : (a) impliquées dans ≥1 pathologie cérébro-vasculaire majeure (AVC, anévrisme, MAV) ET (b) structures anatomiques identifiables en pratique clinique CTA."
+  },
+
+  "level1_families": {
+    "_note": "5 familles Level-1. Déjà validées. mean_dice_fg = 0.717 (holdout test, n=5).",
+    "classes": [
+      {"id": 0, "name": "Background",     "clinically_major": false},
+      {"id": 1, "name": "CoW",            "clinically_major": true,  "dice_test": 0.6807},
+      {"id": 2, "name": "Ant/Mid",        "clinically_major": true,  "dice_test": 0.6726},
+      {"id": 3, "name": "Post",           "clinically_major": true,  "dice_test": 0.7080},
+      {"id": 4, "name": "Vein",           "clinically_major": true,  "dice_test": 0.8065}
+    ]
+  },
+
+  "level2_classes": {
+    "_note": "40 classes fines. Marquées clinically_major=true si Critère B.",
+
+    "family_CoW": {
+      "range": "1-10",
+      "classes": [
+        {
+          "id": 1, "name": "ICA-L",
+          "full_name": "Internal Carotid Artery — left",
+          "clinically_major": true,
+          "reason": "Impliquée dans 35-40% des AVC ischémiques (territoire sylvien). Structure de référence en angioplastie carotidienne.",
+          "typical_volume_vox": "large",
+          "lateralized": true
+        },
+        {
+          "id": 2, "name": "ICA-R",
+          "full_name": "Internal Carotid Artery — right",
+          "clinically_major": true,
+          "reason": "Symétrique ICA-L. Standardisée dans les guidelines AHA/ASA.",
+          "typical_volume_vox": "large",
+          "lateralized": true
+        },
+        {
+          "id": 3, "name": "MCA-L-M1",
+          "full_name": "Middle Cerebral Artery M1 — left",
+          "clinically_major": true,
+          "reason": "Segment M1 = site d'occlusion le plus fréquent en AVC LVO (Large Vessel Occlusion). Cible principale de la thrombectomie mécanique.",
+          "typical_volume_vox": "medium",
+          "lateralized": true
+        },
+        {
+          "id": 4, "name": "MCA-R-M1",
+          "full_name": "Middle Cerebral Artery M1 — right",
+          "clinically_major": true,
+          "reason": "Symétrique MCA-L-M1.",
+          "typical_volume_vox": "medium",
+          "lateralized": true
+        },
+        {
+          "id": 5, "name": "ACA-L-A1",
+          "full_name": "Anterior Cerebral Artery A1 — left",
+          "clinically_major": true,
+          "reason": "Segment A1 = marqueur de la variation anatomique fœtale (ACA azygos). Impliqué dans les AVC frontaux médians.",
+          "typical_volume_vox": "small-medium",
+          "lateralized": true
+        },
+        {
+          "id": 6, "name": "ACA-R-A1",
+          "full_name": "Anterior Cerebral Artery A1 — right",
+          "clinically_major": true,
+          "reason": "Symétrique ACA-L-A1.",
+          "typical_volume_vox": "small-medium",
+          "lateralized": true
+        },
+        {
+          "id": 7, "name": "ACom",
+          "full_name": "Anterior Communicating Artery",
+          "clinically_major": false,
+          "reason": "Site d'anévrisme fréquent MAIS très petite structure (souvent sub-voxel à 128³). Présence anatomique variable (~60-75% des individus). Exclu Critère B car instabilité métrique prévisible à cette résolution.",
+          "typical_volume_vox": "very_small",
+          "lateralized": false
+        },
+        {
+          "id": 8, "name": "PCom-L",
+          "full_name": "Posterior Communicating Artery — left",
+          "clinically_major": false,
+          "reason": "Variante fœtale présente chez ~20-30% des patients. Trop rare et trop petite pour une métrique Dice stable.",
+          "typical_volume_vox": "very_small",
+          "lateralized": true
+        },
+        {
+          "id": 9, "name": "PCom-R",
+          "full_name": "Posterior Communicating Artery — right",
+          "clinically_major": false,
+          "reason": "Même raisonnement que PCom-L.",
+          "typical_volume_vox": "very_small",
+          "lateralized": true
+        },
+        {
+          "id": 10, "name": "BA",
+          "full_name": "Basilar Artery",
+          "clinically_major": true,
+          "reason": "Thrombose du tronc basilaire = urgence neurologique absolue (mortalité > 80% sans reperméabilisation). Structure impaire, bien définie en CTA.",
+          "typical_volume_vox": "medium",
+          "lateralized": false
+        }
+      ]
+    },
+
+    "family_AntMid": {
+      "range": "11-20",
+      "classes": [
+        {
+          "id": 11, "name": "MCA-L-M2+",
+          "full_name": "Middle Cerebral Artery M2 and beyond — left",
+          "clinically_major": true,
+          "reason": "M2 = branche sylvienne principale irriguant le cortex moteur, Broca/Wernicke. Occlusion M2 = AVC invalidant. Structure de grande taille, systématiquement présente.",
+          "typical_volume_vox": "large",
+          "lateralized": true
+        },
+        {
+          "id": 12, "name": "MCA-R-M2+",
+          "full_name": "Middle Cerebral Artery M2 and beyond — right",
+          "clinically_major": true,
+          "reason": "Symétrique MCA-L-M2+.",
+          "typical_volume_vox": "large",
+          "lateralized": true
+        },
+        {
+          "id": 13, "name": "ACA-L-A2",
+          "full_name": "Anterior Cerebral Artery A2 — left",
+          "clinically_major": false,
+          "reason": "Structure plus petite que M2. Retenu dans les ablations mais pas dans le headline Critère B car AVC A2 isolé rare en pratique.",
+          "typical_volume_vox": "small-medium",
+          "lateralized": true
+        },
+        {
+          "id": 14, "name": "ACA-R-A2",
+          "full_name": "Anterior Cerebral Artery A2 — right",
+          "clinically_major": false,
+          "reason": "Symétrique ACA-L-A2.",
+          "typical_volume_vox": "small-medium",
+          "lateralized": true
+        },
+        {
+          "id": 15, "name": "ACA-L-A3+",  "clinically_major": false,
+          "reason": "Sous-segment distal, sub-voxel probable."
+        },
+        {
+          "id": 16, "name": "ACA-R-A3+",  "clinically_major": false,
+          "reason": "Sous-segment distal, sub-voxel probable."
+        },
+        {
+          "id": 17, "name": "Heubner-L",  "clinically_major": false,
+          "reason": "Artère perforante — non discernable à la résolution 128³."
+        },
+        {
+          "id": 18, "name": "Heubner-R",  "clinically_major": false,
+          "reason": "Artère perforante — non discernable à la résolution 128³."
+        },
+        {
+          "id": 19, "name": "Perfo-ant-L", "clinically_major": false,
+          "reason": "Perforantes sub-voxel."
+        },
+        {
+          "id": 20, "name": "Perfo-ant-R", "clinically_major": false,
+          "reason": "Perforantes sub-voxel."
+        }
+      ]
+    },
+
+    "family_Post": {
+      "range": "21-34",
+      "classes": [
+        {
+          "id": 21, "name": "PCA-L-P1",
+          "full_name": "Posterior Cerebral Artery P1 — left",
+          "clinically_major": true,
+          "reason": "AVC du territoire PCA = cécité corticale, syndrome de Balint. P1 = segment proximal, cliniquement prioritaire.",
+          "typical_volume_vox": "medium",
+          "lateralized": true
+        },
+        {
+          "id": 22, "name": "PCA-R-P1",
+          "full_name": "Posterior Cerebral Artery P1 — right",
+          "clinically_major": true,
+          "reason": "Symétrique PCA-L-P1.",
+          "typical_volume_vox": "medium",
+          "lateralized": true
+        },
+        {
+          "id": 23, "name": "PCA-L-P2+", "clinically_major": false,
+          "reason": "Segment distal — utile pour l'ablation mais pas le headline."
+        },
+        {
+          "id": 24, "name": "PCA-R-P2+", "clinically_major": false,
+          "reason": "Symétrique PCA-L-P2+."
+        },
+        {
+          "id": 25, "name": "SCA-L",
+          "full_name": "Superior Cerebellar Artery — left",
+          "clinically_major": false,
+          "reason": "Cliniquement importante mais structure trop petite à 128³."
+        },
+        {
+          "id": 26, "name": "SCA-R", "clinically_major": false,
+          "reason": "Symétrique SCA-L."
+        },
+        {
+          "id": 27, "name": "AICA-L", "clinically_major": false,
+          "reason": "Sub-voxel probable."
+        },
+        {
+          "id": 28, "name": "AICA-R", "clinically_major": false,
+          "reason": "Sub-voxel probable."
+        },
+        {
+          "id": 29, "name": "PICA-L",
+          "full_name": "Posterior Inferior Cerebellar Artery — left",
+          "clinically_major": false,
+          "reason": "Impliquée dans le syndrome de Wallenberg. Petite structure, variable. Exclu Critère B.",
+          "typical_volume_vox": "very_small"
+        },
+        {
+          "id": 30, "name": "PICA-R", "clinically_major": false,
+          "reason": "Symétrique PICA-L."
+        },
+        {
+          "id": 31, "name": "VA-L",
+          "full_name": "Vertebral Artery — left",
+          "clinically_major": true,
+          "reason": "Dissection vertébrale = cause majeure d'AVC du sujet jeune. Structure de taille suffisante en CTA.",
+          "typical_volume_vox": "medium",
+          "lateralized": true
+        },
+        {
+          "id": 32, "name": "VA-R",
+          "full_name": "Vertebral Artery — right",
+          "clinically_major": true,
+          "reason": "Symétrique VA-L.",
+          "typical_volume_vox": "medium",
+          "lateralized": true
+        },
+        {
+          "id": 33, "name": "Perfo-post-L", "clinically_major": false,
+          "reason": "Perforantes sub-voxel."
+        },
+        {
+          "id": 34, "name": "Perfo-post-R", "clinically_major": false,
+          "reason": "Perforantes sub-voxel."
+        }
+      ]
+    },
+
+    "family_Vein": {
+      "range": "35-40",
+      "classes": [
+        {
+          "id": 35, "name": "SSS",
+          "full_name": "Superior Sagittal Sinus",
+          "clinically_major": true,
+          "reason": "Thrombose du sinus longitudinal supérieur = urgence (HTIC, HSD). Structure de très grande taille, systématiquement présente.",
+          "typical_volume_vox": "very_large",
+          "lateralized": false
+        },
+        {
+          "id": 36, "name": "TorHer",
+          "full_name": "Torcular Herophili (confluence des sinus)",
+          "clinically_major": false,
+          "reason": "Structure importante mais souvent fusionnée avec SSS dans les datasets. Exclue pour éviter la redondance métrique."
+        },
+        {
+          "id": 37, "name": "TS-L",
+          "full_name": "Transverse Sinus — left",
+          "clinically_major": true,
+          "reason": "Thrombose du sinus transverse = 2e cause de TSVC. Structure de grande taille.",
+          "typical_volume_vox": "large",
+          "lateralized": true
+        },
+        {
+          "id": 38, "name": "TS-R",
+          "full_name": "Transverse Sinus — right",
+          "clinically_major": true,
+          "reason": "Symétrique TS-L.",
+          "typical_volume_vox": "large",
+          "lateralized": true
+        },
+        {
+          "id": 39, "name": "SigS-L",
+          "full_name": "Sigmoid Sinus — left",
+          "clinically_major": false,
+          "reason": "Cliniquement pertinent mais souvent tronqué dans le FOV CTA. Exclu Critère B."
+        },
+        {
+          "id": 40, "name": "SigS-R",
+          "full_name": "Sigmoid Sinus — right",
+          "clinically_major": false,
+          "reason": "Symétrique SigS-L."
+        }
+      ]
+    }
+  },
+
+  "major_classes_summary": {
+    "_note": "Liste finale des 14 classes majeures (Critère B). À utiliser dans TOUTES les analyses headline.",
+    "count": 14,
+    "ids": [1, 2, 3, 4, 5, 6, 10, 11, 12, 21, 22, 31, 32, 35, 37, 38],
+    "_correction_note": "Ci-dessus : 16 IDs listés. Retrait de SSS(35) et TS-L/R(37,38) si sub-représentés dans le dataset — à confirmer avec explore_level2_dataset.py. Ajustement final = 14 classes confirmées par présence ≥80%.",
+    "classes_by_family": {
+      "CoW (1-10)": [
+        {"id": 1,  "name": "ICA-L",    "note": "AVC carotidien, angioplastie"},
+        {"id": 2,  "name": "ICA-R",    "note": "AVC carotidien, angioplastie"},
+        {"id": 3,  "name": "MCA-L-M1", "note": "LVO — thrombectomie"},
+        {"id": 4,  "name": "MCA-R-M1", "note": "LVO — thrombectomie"},
+        {"id": 5,  "name": "ACA-L-A1", "note": "AVC frontal médian"},
+        {"id": 6,  "name": "ACA-R-A1", "note": "AVC frontal médian"},
+        {"id": 10, "name": "BA",       "note": "Thrombose basilaire — urgence vitale"}
+      ],
+      "Ant/Mid (11-20)": [
+        {"id": 11, "name": "MCA-L-M2+", "note": "Cortex moteur + langage"},
+        {"id": 12, "name": "MCA-R-M2+", "note": "Cortex moteur + langage"}
+      ],
+      "Post (21-34)": [
+        {"id": 21, "name": "PCA-L-P1", "note": "AVC occipital, cécité corticale"},
+        {"id": 22, "name": "PCA-R-P1", "note": "AVC occipital, cécité corticale"},
+        {"id": 31, "name": "VA-L",     "note": "Dissection vertébrale"},
+        {"id": 32, "name": "VA-R",     "note": "Dissection vertébrale"}
+      ],
+      "Vein (35-40)": [
+        {"id": 35, "name": "SSS",  "note": "Thrombose sinus longitudinal sup."},
+        {"id": 37, "name": "TS-L", "note": "Thrombose sinus transverse"},
+        {"id": 38, "name": "TS-R", "note": "Thrombose sinus transverse"}
+      ]
+    }
+  },
+
+  "ablation_classes": {
+    "_note": "Classes supplémentaires incluses dans les ablations (Critère C éventuel). Pas dans le headline mais dans le tableau exhaustif de thèse.",
+    "candidates": [13, 14, 23, 24, 25, 26, 29, 30, 36, 39, 40],
+    "to_confirm_with": "explore_level2_dataset.py --output-json results/level2_stats.json"
+  }
+}

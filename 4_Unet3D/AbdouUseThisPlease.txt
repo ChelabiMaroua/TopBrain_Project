@@ -7,8 +7,9 @@ python .\4_Unet3D\train_unet3d_binary.py `
     --num-classes 5 `
     --swin-feature-size 48 `
     --patch-size 128 128 128 `
-    --batch-size 2 `
-    --accum-steps 4 `
+    --batch-size 1 `
+    --accum-steps 8 `
+    --empty-cache-before-val `
     --patches-per-volume 4 `
     --train-fg-oversample-prob 0.85 `
     --lr 1e-4 `
@@ -18,4 +19,4 @@ python .\4_Unet3D\train_unet3d_binary.py `
     --sw-mode "gaussian" `
     --augment `
     --amp `
-    --num-workers 8
+    --num-workers 4

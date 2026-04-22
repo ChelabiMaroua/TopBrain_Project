@@ -33,6 +33,10 @@ from typing import Dict, List, Optional, Tuple
 import numpy as np
 import torch
 import torch.nn as nn
+try:
+    import matplotlib.pyplot as plt
+except Exception:  # noqa: BLE001
+    plt = None
 from dotenv import load_dotenv
 from monai.inferers import sliding_window_inference
 from monai.losses import DiceCELoss
@@ -363,7 +367,7 @@ def evaluate_metrics(
     use_amp: bool = False,
 ) -> Dict[str, float]:
     model.eval()
-    agg = {"mean_dice_fg": 0.0, "mean_iou_fg": 0.0, "combined_score": 0.0}
+    agg: Dict[str, float] = {}
     n = 0
 
     for x, y in loader:
@@ -382,16 +386,50 @@ def evaluate_metrics(
             pred = torch.argmax(logits, dim=1)
         m = dice_iou_per_class(pred, y, num_classes=num_classes)
 
-        agg["mean_dice_fg"] += m["mean_dice_fg"]
-        agg["mean_iou_fg"] += m["mean_iou_fg"]
-        agg["combined_score"] += m["combined_score"]
+        for k, v in m.items():
+            if isinstance(v, (int, float, np.floating, np.integer)):
+                agg[k] = agg.get(k, 0.0) + float(v)
         n += 1
 
     if n == 0:
         return agg
-    for key in agg:
+    for key in list(agg.keys()):
         agg[key] /= n
     return agg
+
+
+def save_loss_curve(history: List[Dict[str, float | int | str]], out_path: Path) -> bool:
+    """Save a train-vs-val loss curve from epoch history."""
+    if plt is None:
+        return False
+
+    epochs: List[int] = []
+    train_losses: List[float] = []
+    val_losses: List[float] = []
+    for row in history:
+        if "epoch" not in row or "train_loss" not in row or "val_loss" not in row:
+            continue
+        epochs.append(int(row["epoch"]))
+        train_losses.append(float(row["train_loss"]))
+        val_losses.append(float(row["val_loss"]))
+
+    if not epochs:
+        return False
+
+    fig = plt.figure(figsize=(7.5, 4.5), dpi=120)
+    ax = fig.add_subplot(111)
+    ax.plot(epochs, train_losses, label="train_loss", linewidth=2.0)
+    ax.plot(epochs, val_losses, label="val_loss", linewidth=2.0)
+    ax.set_xlabel("Epoch")
+    ax.set_ylabel("Loss")
+    ax.set_title("Level-1 Loss Curve (Train vs Val)")
+    ax.grid(True, alpha=0.3)
+    ax.legend(loc="best")
+    fig.tight_layout()
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(out_path)
+    plt.close(fig)
+    return True
 
 
 class DiceCELossWrapper(nn.Module):
@@ -404,6 +442,10 @@ class DiceCELossWrapper(nn.Module):
         ce_weight: Optional[torch.Tensor] = None,
     ):
         super().__init__()
+        # Normalise les poids pour que leur moyenne = 1.0
+        # Évite l'amplification artificielle de la CE loss
+        if ce_weight is not None:
+            ce_weight = ce_weight / ce_weight.mean()
         self.loss = DiceCELoss(
             to_onehot_y=True,
             softmax=True,
@@ -528,7 +570,7 @@ def main() -> None:
     parser.add_argument("--pos-weight", type=float, default=0.0,
                         help="Single weight applied to all foreground classes if >0.")
     parser.add_argument("--auto-class-weights", action="store_true",
-                        help="Compute inverse-frequency CE weights from the train split.")
+                        help="Compute median-frequency CE weights from the train split.")
 
     parser.add_argument("--patches-per-volume", type=int, default=1)
     parser.add_argument("--train-fg-oversample-prob", type=float, default=0.75)
@@ -549,6 +591,8 @@ def main() -> None:
 
     parser.add_argument("--save-dir", default=os.getenv("TOPBRAIN_CHECKPOINT_DIR", ""))
     parser.add_argument("--early-stopping", type=int, default=20)
+    parser.add_argument("--no-loss-curve", action="store_true",
+                        help="Disable train/val loss curve PNG export during training.")
 
     args = parser.parse_args()
 
@@ -682,9 +726,13 @@ def main() -> None:
     elif args.auto_class_weights:
         eps = 1e-6
         freqs = train_counts.astype(np.float64) / max(float(train_counts.sum()), 1.0)
-        inv = 1.0 / np.maximum(freqs, eps)
-        inv = inv / np.mean(inv)
-        ce_weight_tensor = torch.tensor(inv.astype(np.float32), dtype=torch.float32, device=device)
+        fg_freqs = freqs[1:]
+        safe_fg_freqs = np.maximum(fg_freqs, eps)
+        median_fg = float(np.median(safe_fg_freqs))
+        weights = np.ones(args.num_classes, dtype=np.float32)
+        weights[0] = 0.05
+        weights[1:] = (median_fg / safe_fg_freqs).astype(np.float32)
+        ce_weight_tensor = torch.tensor(weights, dtype=torch.float32, device=device)
 
     if args.loss == "dicece":
         criterion = DiceCELossWrapper(
@@ -704,6 +752,10 @@ def main() -> None:
     save_dir = Path(args.save_dir)
     save_dir.mkdir(parents=True, exist_ok=True)
     checkpoint_path = save_dir / f"swinunetr_level1_best_{args.fold}.pth"
+    history_path = save_dir / f"history_level1_{args.fold}.json"
+    curve_path = save_dir / f"curve_loss_{args.fold}.png"
+    history: List[Dict[str, float | int | str]] = []
+    warned_no_curve_backend = False
 
     best_score = -1.0
     best_epoch = 0
@@ -776,6 +828,39 @@ def main() -> None:
         total_hours = (time.perf_counter() - train_start) / 3600.0
         score = metrics["combined_score"]
 
+        cls_dice = " ".join(
+            f"d{cls}={metrics.get(f'dice_class_{cls}', float('nan')):.3f}"
+            for cls in range(1, args.num_classes)
+        )
+        cls_recall = " ".join(
+            f"r{cls}={metrics.get(f'recall_class_{cls}', float('nan')):.3f}"
+            for cls in range(1, args.num_classes)
+        )
+        cls_precision = " ".join(
+            f"p{cls}={metrics.get(f'precision_class_{cls}', float('nan')):.3f}"
+            for cls in range(1, args.num_classes)
+        )
+
+        epoch_record: Dict[str, float | int | str] = {
+            "epoch": int(epoch),
+            "train_loss": float(train_loss),
+            "val_loss": float(val_loss),
+            "lr": float(current_lr),
+            "epoch_seconds": float(epoch_sec),
+            "total_hours": float(total_hours),
+            "is_best": bool(score > best_score),
+        }
+        for k, v in metrics.items():
+            if isinstance(v, (int, float, np.floating, np.integer)):
+                epoch_record[k] = float(v)
+        history.append(epoch_record)
+        history_path.write_text(json.dumps(history, indent=2), encoding="utf-8")
+        if not args.no_loss_curve:
+            curve_saved = save_loss_curve(history, curve_path)
+            if not curve_saved and not warned_no_curve_backend:
+                warned_no_curve_backend = True
+                print("[warn] matplotlib backend unavailable, loss curve export disabled.")
+
         if score > best_score:
             best_score = score
             best_epoch = epoch
@@ -797,6 +882,9 @@ def main() -> None:
                 f"combined={score:.4f} | lr={current_lr:.2e} | "
                 f"epoch={epoch_sec:.1f}s total={total_hours:.2f}h | ** BEST ** (saved)"
             )
+            print(f"  [cls dice] {cls_dice}")
+            print(f"  [cls rec ] {cls_recall}")
+            print(f"  [cls prec] {cls_precision}")
         else:
             epochs_no_improve += 1
             print(
@@ -806,6 +894,9 @@ def main() -> None:
                 f"combined={score:.4f} | lr={current_lr:.2e} | "
                 f"epoch={epoch_sec:.1f}s total={total_hours:.2f}h"
             )
+            print(f"  [cls dice] {cls_dice}")
+            print(f"  [cls rec ] {cls_recall}")
+            print(f"  [cls prec] {cls_precision}")
 
         if args.early_stopping > 0 and epochs_no_improve >= args.early_stopping:
             print(f"[info] Early stopping after {epoch} epochs "
@@ -814,6 +905,9 @@ def main() -> None:
 
     print(f"\n[done] Best combined score = {best_score:.4f} at epoch {best_epoch}")
     print(f"[done] Saved model: {checkpoint_path}")
+    print(f"[done] History: {history_path}")
+    if not args.no_loss_curve and plt is not None:
+        print(f"[done] Loss curve: {curve_path}")
 
 
 if __name__ == "__main__":

@@ -48,13 +48,35 @@ def build_monai_transforms(seed: int = 42) -> list[tuple[str, Compose]]:
 
 def apply_monai_transform(image: np.ndarray, label: np.ndarray, transform: Compose) -> tuple[np.ndarray, np.ndarray]:
     """Applique une transformation MONAI sur un couple Image/Label."""
-    # MONAI attend un format [Channel, H, W, D] -> on ajoute la dimension Channel avec None
+    # MONAI attend un format [C, H, W, D].
+    # Si l'image est déjà multi-canaux (ex: [2, H, W, D]), ne pas ré-ajouter un canal.
+    if image.ndim == 3:
+        image_in = image[None, ...]
+        image_had_channel = False
+    elif image.ndim == 4:
+        image_in = image
+        image_had_channel = True
+    else:
+        raise ValueError(f"Unsupported image shape for MONAI transform: {image.shape}")
+
+    if label.ndim == 3:
+        label_in = label[None, ...]
+        label_had_channel = False
+    elif label.ndim == 4:
+        label_in = label
+        label_had_channel = True
+    else:
+        raise ValueError(f"Unsupported label shape for MONAI transform: {label.shape}")
+
     sample = {
-        "image": image[None, ...].astype(np.float32, copy=False),
-        "label": label[None, ...].astype(np.int64, copy=False),
+        "image": image_in.astype(np.float32, copy=False),
+        "label": label_in.astype(np.int64, copy=False),
     }
     out = transform(sample)
-    # On retire la dimension Channel pour revenir en [H, W, D]
-    aug_image = np.asarray(out["image"][0], dtype=np.float32)
-    aug_label = np.asarray(out["label"][0], dtype=np.int64)
+
+    out_image = np.asarray(out["image"], dtype=np.float32)
+    out_label = np.asarray(out["label"], dtype=np.int64)
+
+    aug_image = out_image if image_had_channel else out_image[0]
+    aug_label = out_label if label_had_channel else out_label[0]
     return aug_image, aug_label

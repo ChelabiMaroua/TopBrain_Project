@@ -1,63 +1,245 @@
 {
-  "src_collection": "BinaryPatients",
-  "dst_collection": "HierarchicalPatients3D_Level1_CTA41",
+  "src_collection": "MultiClassPatients3D_Binary_CTA41",
+  "dst_collection": "HierarchicalPatients3D_Level1_CTA41_Test",
   "target_size": "128x128x64",
   "counts": {
-    "processed": 3,
-    "inserted": 0,
+    "processed": 5,
+    "inserted": 5,
     "skipped_existing": 0,
-    "skipped_no_mask": 0,
+    "skipped_no_mask": 20,
     "errors": 0
   },
-  "elapsed_sec": 0.25,
+  "elapsed_sec": 2.01,
   "patients": [
     {
       "patient_id": "001",
-      "shape": [
-        128,
-        128,
-        64
-      ],
-      "mask_n0_fg_voxels": 6985,
-      "label_fg_voxels": 3621,
-      "mask_recall_vs_gt": 0.014085,
-      "native_mask_shape": [
-        197,
-        324,
-        239
-      ]
+      "error": "no stage-1 mask in manifest"
     },
     {
       "patient_id": "002",
-      "shape": [
-        128,
-        128,
-        64
-      ],
-      "mask_n0_fg_voxels": 7741,
-      "label_fg_voxels": 5035,
-      "mask_recall_vs_gt": 0.020655,
-      "native_mask_shape": [
-        271,
-        333,
-        200
-      ]
+      "error": "no stage-1 mask in manifest"
     },
     {
       "patient_id": "003",
+      "error": "no stage-1 mask in manifest"
+    },
+    {
+      "patient_id": "004",
+      "error": "no stage-1 mask in manifest"
+    },
+    {
+      "patient_id": "005",
+      "error": "no stage-1 mask in manifest"
+    },
+    {
+      "patient_id": "006",
+      "error": "no stage-1 mask in manifest"
+    },
+    {
+      "patient_id": "007",
+      "error": "no stage-1 mask in manifest"
+    },
+    {
+      "patient_id": "008",
+      "error": "no stage-1 mask in manifest"
+    },
+    {
+      "patient_id": "010",
+      "error": "no stage-1 mask in manifest"
+    },
+    {
+      "patient_id": "011",
       "shape": [
         128,
         128,
         64
       ],
-      "mask_n0_fg_voxels": 9561,
-      "label_fg_voxels": 3541,
-      "mask_recall_vs_gt": 0.025981,
+      "mask_n0_fg_voxels": 5083,
+      "label_fg_voxels": 4268,
+      "mask_recall_vs_gt": 0.78702,
       "native_mask_shape": [
-        277,
-        282,
-        181
+        128,
+        128,
+        64
+      ],
+      "label_unique": [
+        0,
+        1,
+        2,
+        3,
+        4
+      ],
+      "label_source": "lbl_path",
+      "label_path": "C:\\Study\\Maroua\\TopBrain_Data_Release_Batches1n2_081425\\labelsTr_topbrain_ct\\topcow_ct_011.nii.gz",
+      "native_label_shape": [
+        269,
+        334,
+        295
       ]
+    },
+    {
+      "patient_id": "012",
+      "error": "no stage-1 mask in manifest"
+    },
+    {
+      "patient_id": "013",
+      "error": "no stage-1 mask in manifest"
+    },
+    {
+      "patient_id": "014",
+      "shape": [
+        128,
+        128,
+        64
+      ],
+      "mask_n0_fg_voxels": 5357,
+      "label_fg_voxels": 4374,
+      "mask_recall_vs_gt": 0.794467,
+      "native_mask_shape": [
+        128,
+        128,
+        64
+      ],
+      "label_unique": [
+        0,
+        1,
+        2,
+        3,
+        4
+      ],
+      "label_source": "lbl_path",
+      "label_path": "C:\\Study\\Maroua\\TopBrain_Data_Release_Batches1n2_081425\\labelsTr_topbrain_ct\\topcow_ct_014.nii.gz",
+      "native_label_shape": [
+        247,
+        328,
+        211
+      ]
+    },
+    {
+      "patient_id": "015",
+      "error": "no stage-1 mask in manifest"
+    },
+    {
+      "patient_id": "016",
+      "error": "no stage-1 mask in manifest"
+    },
+    {
+      "patient_id": "017",
+      "error": "no stage-1 mask in manifest"
+    },
+    {
+      "patient_id": "018",
+      "shape": [
+        128,
+        128,
+        64
+      ],
+      "mask_n0_fg_voxels": 3986,
+      "label_fg_voxels": 3002,
+      "mask_recall_vs_gt": 0.802798,
+      "native_mask_shape": [
+        128,
+        128,
+        64
+      ],
+      "label_unique": [
+        0,
+        1,
+        2,
+        3,
+        4
+      ],
+      "label_source": "lbl_path",
+      "label_path": "C:\\Study\\Maroua\\TopBrain_Data_Release_Batches1n2_081425\\labelsTr_topbrain_ct\\topcow_ct_018.nii.gz",
+      "native_label_shape": [
+        286,
+        379,
+        202
+      ]
+    },
+    {
+      "patient_id": "020",
+      "error": "no stage-1 mask in manifest"
+    },
+    {
+      "patient_id": "021",
+      "shape": [
+        128,
+        128,
+        64
+      ],
+      "mask_n0_fg_voxels": 5630,
+      "label_fg_voxels": 5456,
+      "mask_recall_vs_gt": 0.77346,
+      "native_mask_shape": [
+        128,
+        128,
+        64
+      ],
+      "label_unique": [
+        0,
+        1,
+        2,
+        3,
+        4
+      ],
+      "label_source": "lbl_path",
+      "label_path": "C:\\Study\\Maroua\\TopBrain_Data_Release_Batches1n2_081425\\labelsTr_topbrain_ct\\topcow_ct_021.nii.gz",
+      "native_label_shape": [
+        275,
+        345,
+        205
+      ]
+    },
+    {
+      "patient_id": "022",
+      "shape": [
+        128,
+        128,
+        64
+      ],
+      "mask_n0_fg_voxels": 7370,
+      "label_fg_voxels": 5414,
+      "mask_recall_vs_gt": 0.851866,
+      "native_mask_shape": [
+        128,
+        128,
+        64
+      ],
+      "label_unique": [
+        0,
+        1,
+        2,
+        3,
+        4
+      ],
+      "label_source": "lbl_path",
+      "label_path": "C:\\Study\\Maroua\\TopBrain_Data_Release_Batches1n2_081425\\labelsTr_topbrain_ct\\topcow_ct_022.nii.gz",
+      "native_label_shape": [
+        287,
+        351,
+        224
+      ]
+    },
+    {
+      "patient_id": "023",
+      "error": "no stage-1 mask in manifest"
+    },
+    {
+      "patient_id": "024",
+      "error": "no stage-1 mask in manifest"
+    },
+    {
+      "patient_id": "025",
+      "error": "no stage-1 mask in manifest"
+    },
+    {
+      "patient_id": "026",
+      "error": "no stage-1 mask in manifest"
+    },
+    {
+      "patient_id": "027",
+      "error": "no stage-1 mask in manifest"
     }
   ]
 }

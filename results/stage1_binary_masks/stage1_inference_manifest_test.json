@@ -1,0 +1,57 @@
+[
+  {
+    "patient_id": "011",
+    "mask_path": "C:\\Study\\Maroua\\TopBrain_Project\\results\\stage1_binary_masks\\011_mask_vessels.nii.gz",
+    "shape": [
+      128,
+      128,
+      64
+    ],
+    "foreground_voxels": 5083,
+    "foreground_ratio": 0.00484753
+  },
+  {
+    "patient_id": "014",
+    "mask_path": "C:\\Study\\Maroua\\TopBrain_Project\\results\\stage1_binary_masks\\014_mask_vessels.nii.gz",
+    "shape": [
+      128,
+      128,
+      64
+    ],
+    "foreground_voxels": 5357,
+    "foreground_ratio": 0.00510883
+  },
+  {
+    "patient_id": "018",
+    "mask_path": "C:\\Study\\Maroua\\TopBrain_Project\\results\\stage1_binary_masks\\018_mask_vessels.nii.gz",
+    "shape": [
+      128,
+      128,
+      64
+    ],
+    "foreground_voxels": 3986,
+    "foreground_ratio": 0.00380135
+  },
+  {
+    "patient_id": "021",
+    "mask_path": "C:\\Study\\Maroua\\TopBrain_Project\\results\\stage1_binary_masks\\021_mask_vessels.nii.gz",
+    "shape": [
+      128,
+      128,
+      64
+    ],
+    "foreground_voxels": 5630,
+    "foreground_ratio": 0.00536919
+  },
+  {
+    "patient_id": "022",
+    "mask_path": "C:\\Study\\Maroua\\TopBrain_Project\\results\\stage1_binary_masks\\022_mask_vessels.nii.gz",
+    "shape": [
+      128,
+      128,
+      64
+    ],
+    "foreground_voxels": 7370,
+    "foreground_ratio": 0.00702858
+  }
+]
