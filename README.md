@@ -1,15 +1,26 @@
-# TopBrain - Hierarchical 3D Brain Vessel Segmentation (CTA)
 
-Research-oriented deep learning pipeline for cerebrovascular segmentation from 3D CTA volumes, designed with reproducibility, staged learning, and clinical interpretability in mind.
+# Semantic Segmentation of Brain Structures from CTA Images Using Deep Learning and NoSQL-based ETL Pipelines
+
+
+
+# TopBrain - Impact of Database Integration on 3D Brain Vessel Segmentation (CTA)
+
+This repository presents a research pipeline for semantic segmentation of brain vessels from 3D CTA images using deep learning, with a focus on the impact of integrating a NoSQL database (MongoDB) into the data and model pipeline. The project compares several model architectures (including hierarchical segmentation) and demonstrates that leveraging a structured database for data management and ETL (Extract, Transform, Load) processes can improve the performance and reproducibility of AI models in medical imaging.
+
+**Key points:**
+- The main research question is: _Does integrating a database into the AI pipeline improve segmentation results for brain vessels?_
+- Multiple model architectures are compared (hierarchical segmentation is just one of them).
+- The addition of a database (MongoDB) for data storage, annotation, and ETL automation leads to better data quality, experiment tracking, and improved model results.
+- Despite these improvements, the detection of ultra-thin vessels remains a major challenge and is identified as a potential topic for future doctoral research.
+
 
 ## Why This Repo
 
-This repository is organized to demonstrate applied medical AI research skills end-to-end:
-
-- data engineering + quality controls
-- hierarchical model design (coarse-to-fine)
-- reproducible experiments and diagnostics
-- clear reporting of metrics and failure modes
+This repository is designed to:
+- Demonstrate the impact of database-driven data engineering and ETL on deep learning for medical image segmentation
+- Compare different model architectures (not limited to hierarchical)
+- Provide reproducible experiments and clear diagnostics
+- Report not only metrics but also the practical limitations and open challenges (notably, the segmentation of ultra-thin vessels)
 
 ## Problem
 
@@ -19,50 +30,23 @@ Segmenting brain vessels is difficult because of:
 - high anatomical variability across patients
 - thin structures and low local contrast
 
+
 ## Method Overview
 
-The project uses a 3-stage hierarchical strategy:
+The project implements and compares several 3D segmentation models (including SwinUNETR and hierarchical approaches) on brain vessel segmentation tasks. The pipeline is built around:
+- Automated ETL flows using MongoDB for data storage, annotation, and experiment management
+- Patch-based 3D training (PyTorch/MONAI)
+- Foreground oversampling and DiceCE loss
 
-1. Stage 1 (Binary): vessel vs background prior mask.
-2. Stage 2 (Level-1 families): 5 classes (BG, CoW, Ant/Mid, Post, Vein).
-3. Stage 3 (Level-2 fine): 41 classes with Stage-2 checkpoint initialization.
-
-Model family: SwinUNETR (MONAI/PyTorch), patch-based 3D training with foreground oversampling and DiceCE loss.
 
 ## Current Results (Fold 1)
 
-### Stage 1 - Binary (val split, threshold = 0.35)
+_Results will be updated with final graphs and metrics. See diagnostic JSON files for current experiment outputs._
 
-- Mean recall: 0.8010
-- Mean precision: 0.7480
-- Mean Dice: 0.7726
-- Diagnostic file: [stage1_diagnostic.json](stage1_diagnostic.json)
-
-### Stage 2 - Level-1 Families (5 classes, val split)
-
-- Mean Dice over FG classes: 0.7076
-- Mean IoU over FG classes: 0.5626
-- Combined score: 0.6351
-- Diagnostic file: [results/level1_diag_fold_1.json](results/level1_diag_fold_1.json)
-
-### Stage 3 - Level-2 Fine (41 classes, fold_1)
-
-- Best epoch: 186
-- Best `val_dice_fg` (40 FG classes): 0.3979
-- Active classes at best epoch: 31
-- Checkpoint: [5_HierarchicalSeg/checkpoints/stage3_level2_v1/swinunetr_level2_best_fold_1.pth](5_HierarchicalSeg/checkpoints/stage3_level2_v1/swinunetr_level2_best_fold_1.pth)
-- History: [5_HierarchicalSeg/checkpoints/stage3_level2_v1/history_level2_fold_1.json](5_HierarchicalSeg/checkpoints/stage3_level2_v1/history_level2_fold_1.json)
 
 ## Visual Outputs
 
-### Training/Progress
-
-![Training Progress](progress.png)
-
-### Pipeline Illustration
-
-![Stage 1](Unet3DcascadeBinarystep1.png)
-![Stage 2](Unet3DcascadeBinarystep2.png)
+_Final plots and illustrations will be added soon._
 
 ## Reproducibility
 
