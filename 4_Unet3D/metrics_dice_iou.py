@@ -12,16 +12,21 @@ def dice_iou_per_class(
     smooth: float = 1e-6,
 ) -> Dict[str, float]:
     """
-    Compute Dice and IoU per class.
+    Compute Dice, IoU, Recall and Precision per class, plus foreground means.
 
-    Key fix vs original: classes with ZERO ground-truth pixels are EXCLUDED
-    from the foreground mean. Averaging over absent classes dilutes the score
-    massively (e.g. 41 classes but only 15 present -> true Dice divided by ~3).
-    This is the standard evaluation protocol used by nnU-Net and TopCow challenge.
+    Key behaviors:
+    - Classes with ZERO ground-truth pixels are EXCLUDED from foreground means
+      (standard nnU-Net / TopCow protocol). Averaging over absent classes
+      dilutes the score massively.
+    - Recall and precision are returned alongside Dice/IoU. For cascade usage,
+      recall is especially important because missed foreground voxels cannot be
+      recovered downstream.
     """
     result: Dict[str, float] = {}
     dice_fg: list = []
     iou_fg: list = []
+    recall_fg: list = []
+    precision_fg: list = []
 
     # Move to CPU and keep compact integer type to reduce host RAM footprint.
     preds_np = preds.detach().cpu().numpy().astype(np.uint8)
@@ -45,14 +50,20 @@ def dice_iou_per_class(
 
         dice = float((2.0 * inter + smooth) / (p_sum + t_sum + smooth))
         iou  = float((inter + smooth) / (union + smooth))
+        recall = float((inter + smooth) / (t_sum + smooth))
+        precision = float((inter + smooth) / (p_sum + smooth))
 
         result[f"dice_class_{cls}"] = dice
         result[f"iou_class_{cls}"]  = iou
+        result[f"recall_class_{cls}"] = recall
+        result[f"precision_class_{cls}"] = precision
 
         # Only include in fg mean if class is PRESENT in ground truth
         if cls > 0 and t_sum > 0:
             dice_fg.append(dice)
             iou_fg.append(iou)
+            recall_fg.append(recall)
+            precision_fg.append(precision)
 
         del p
 
@@ -61,6 +72,8 @@ def dice_iou_per_class(
 
     result["mean_dice_fg"] = float(np.mean(dice_fg)) if dice_fg else 0.0
     result["mean_iou_fg"]  = float(np.mean(iou_fg))  if iou_fg  else 0.0
+    result["mean_recall_fg"] = float(np.mean(recall_fg)) if recall_fg else 0.0
+    result["mean_precision_fg"] = float(np.mean(precision_fg)) if precision_fg else 0.0
     result["combined_score"] = 0.5 * (result["mean_dice_fg"] + result["mean_iou_fg"])
     result["num_active_classes"] = len(dice_fg)
     return result

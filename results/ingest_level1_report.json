@@ -1,0 +1,63 @@
+{
+  "src_collection": "BinaryPatients",
+  "dst_collection": "HierarchicalPatients3D_Level1_CTA41",
+  "target_size": "128x128x64",
+  "counts": {
+    "processed": 3,
+    "inserted": 0,
+    "skipped_existing": 0,
+    "skipped_no_mask": 0,
+    "errors": 0
+  },
+  "elapsed_sec": 0.25,
+  "patients": [
+    {
+      "patient_id": "001",
+      "shape": [
+        128,
+        128,
+        64
+      ],
+      "mask_n0_fg_voxels": 6985,
+      "label_fg_voxels": 3621,
+      "mask_recall_vs_gt": 0.014085,
+      "native_mask_shape": [
+        197,
+        324,
+        239
+      ]
+    },
+    {
+      "patient_id": "002",
+      "shape": [
+        128,
+        128,
+        64
+      ],
+      "mask_n0_fg_voxels": 7741,
+      "label_fg_voxels": 5035,
+      "mask_recall_vs_gt": 0.020655,
+      "native_mask_shape": [
+        271,
+        333,
+        200
+      ]
+    },
+    {
+      "patient_id": "003",
+      "shape": [
+        128,
+        128,
+        64
+      ],
+      "mask_n0_fg_voxels": 9561,
+      "label_fg_voxels": 3541,
+      "mask_recall_vs_gt": 0.025981,
+      "native_mask_shape": [
+        277,
+        282,
+        181
+      ]
+    }
+  ]
+}
