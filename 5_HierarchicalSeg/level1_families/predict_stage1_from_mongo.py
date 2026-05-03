@@ -4,9 +4,8 @@ predict_stage1_from_mongo.py
 Stage-1 binary vessel prediction that reads directly from a MongoDB binary
 collection — same preprocessing as training, no NIfTI file dependency.
 
-Supports both:
-  - Binary (2-class) models   : argmax channel 1 = vessel
-  - N-class (e.g. 5-class) models : any class > 0 = vessel  (binarize)
+Stage-1 is binary only:
+    - Binary (2-class) models : argmax channel 1 = vessel
 
 Output
 ------
@@ -15,12 +14,12 @@ For each patient:
   - results/stage1_binary_masks/stage1_inference_manifest.json
     (same format as predict_stage1.py, consumed by ingest_level1_mongo.py)
 
-Typical usage (5-class Stage2_Cropped_4C model):
+Typical usage:
   python 5_HierarchicalSeg/level1_families/predict_stage1_from_mongo.py ^
     --collection Stage2_Cropped_4C ^
     --target-size stage2_cropped_4c ^
     --checkpoint 4_Unet3D/checkpoints/results_stage2_4c_TITAN/swinunetr_best_fold_1.pth ^
-    --num-classes 5 ^
+        --num-classes 2 ^
     --patch-size 128 128 128 ^
     --swin-feature-size 48 ^
     --sw-overlap 0.5 ^
@@ -225,9 +224,8 @@ def main() -> None:
         required=True,
         help="Path to the SwinUNETR checkpoint (.pth).",
     )
-    parser.add_argument("--num-classes",       type=int, default=2,
-                        help="Number of output classes the checkpoint was trained with. "
-                             "2 = binary model; 5 = 5-family model (binarized).")
+    parser.add_argument("--num-classes",       type=int, default=2, choices=[2],
+                        help="Stage-1 is binary only: 2 classes (background, vessel).")
     parser.add_argument("--patch-size",        type=int, nargs=3, default=[128, 128, 64])
     parser.add_argument("--swin-feature-size", type=int, default=48)
     parser.add_argument("--disable-checkpointing", action="store_true")

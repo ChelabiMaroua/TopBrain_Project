@@ -1,0 +1,465 @@
+
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--font-sans);font-size:14px;color:var(--color-text-primary);background:transparent}
+.app{display:grid;grid-template-columns:220px 1fr;grid-template-rows:48px 1fr 200px;height:700px;gap:0;border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-lg);overflow:hidden;background:var(--color-background-primary)}
+.topbar{grid-column:1/-1;display:flex;align-items:center;gap:12px;padding:0 16px;border-bottom:0.5px solid var(--color-border-tertiary);background:var(--color-background-secondary)}
+.logo{font-size:15px;font-weight:500;color:var(--color-text-primary)}
+.logo span{color:#185FA5}
+.badge{font-size:11px;padding:2px 8px;border-radius:20px;background:var(--color-background-info);color:var(--color-text-info)}
+.topbar-actions{margin-left:auto;display:flex;gap:8px;align-items:center}
+.btn{font-size:12px;padding:5px 12px;border-radius:var(--border-radius-md);border:0.5px solid var(--color-border-secondary);background:transparent;color:var(--color-text-primary);cursor:pointer}
+.btn:hover{background:var(--color-background-secondary)}
+.btn-primary{background:#185FA5;color:#fff;border-color:#185FA5}
+.btn-primary:hover{background:#0C447C}
+.sidebar{grid-column:1;grid-row:2/4;border-right:0.5px solid var(--color-border-tertiary);padding:12px;display:flex;flex-direction:column;gap:12px;overflow-y:auto;background:var(--color-background-secondary)}
+.section-label{font-size:11px;font-weight:500;color:var(--color-text-secondary);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:6px}
+.upload-zone{border:0.5px dashed var(--color-border-secondary);border-radius:var(--border-radius-md);padding:16px;text-align:center;cursor:pointer;background:var(--color-background-primary)}
+.upload-zone:hover{border-color:#185FA5;background:var(--color-background-info)}
+.upload-icon{font-size:20px;margin-bottom:6px}
+.upload-text{font-size:12px;color:var(--color-text-secondary)}
+.file-loaded{font-size:12px;color:var(--color-text-info);background:var(--color-background-info);padding:6px 8px;border-radius:var(--border-radius-md)}
+.metric-row{display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:0.5px solid var(--color-border-tertiary)}
+.metric-row:last-child{border:none}
+.metric-label{font-size:12px;color:var(--color-text-secondary)}
+.metric-value{font-size:13px;font-weight:500}
+.metric-good{color:#0F6E56}
+.progress-bar{height:4px;background:var(--color-border-tertiary);border-radius:2px;margin-top:3px}
+.progress-fill{height:100%;border-radius:2px;background:#185FA5;transition:width 0.5s}
+.class-item{display:flex;align-items:center;gap:6px;padding:3px 0;cursor:pointer}
+.class-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+.class-name{font-size:11px;color:var(--color-text-secondary);flex:1}
+.class-toggle{width:28px;height:14px;border-radius:7px;background:var(--color-border-tertiary);position:relative;cursor:pointer;transition:background 0.2s}
+.class-toggle.on{background:#185FA5}
+.class-toggle::after{content:'';position:absolute;width:10px;height:10px;border-radius:50%;background:white;top:2px;left:2px;transition:left 0.2s}
+.class-toggle.on::after{left:16px}
+.main-view{grid-column:2;grid-row:2;display:flex;flex-direction:column;gap:0;overflow:hidden}
+.view-tabs{display:flex;border-bottom:0.5px solid var(--color-border-tertiary);padding:0 12px;background:var(--color-background-secondary)}
+.tab{font-size:12px;padding:8px 14px;cursor:pointer;border-bottom:2px solid transparent;color:var(--color-text-secondary);transition:all 0.15s}
+.tab.active{color:#185FA5;border-bottom-color:#185FA5}
+.tab:hover:not(.active){color:var(--color-text-primary)}
+.view-area{flex:1;position:relative;background:#0a0a0f;overflow:hidden;display:flex;align-items:center;justify-content:center}
+canvas#c3d{display:block}
+.view-overlay{position:absolute;top:8px;left:8px;display:flex;gap:6px;flex-wrap:wrap}
+.view-badge{font-size:10px;padding:2px 7px;border-radius:10px;background:rgba(24,95,165,0.7);color:#B5D4F4;font-weight:500}
+.controls-hint{position:absolute;bottom:8px;right:8px;font-size:10px;color:rgba(181,212,244,0.5)}
+.slice-controls{position:absolute;bottom:8px;left:8px;display:flex;gap:8px;align-items:center}
+.slice-label{font-size:10px;color:rgba(181,212,244,0.6)}
+input[type=range].slice-input{width:80px;height:3px;accent-color:#185FA5;cursor:pointer}
+.multiplanar{display:none;width:100%;height:100%;display:none;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:1px;background:var(--color-border-tertiary)}
+.mp-view{position:relative;background:#0a0a0f;display:flex;align-items:center;justify-content:center;overflow:hidden}
+.mp-label{position:absolute;top:6px;left:8px;font-size:10px;color:rgba(181,212,244,0.6);font-weight:500}
+canvas.mp-canvas{display:block}
+.bottombar{grid-column:2;grid-row:3;border-top:0.5px solid var(--color-border-tertiary);display:flex;gap:12px;padding:12px;overflow-x:auto;align-items:flex-start}
+.report-card{flex-shrink:0;width:140px;background:var(--color-background-secondary);border-radius:var(--border-radius-md);border:0.5px solid var(--color-border-tertiary);padding:10px}
+.report-title{font-size:11px;font-weight:500;margin-bottom:8px;color:var(--color-text-primary)}
+.report-stat{font-size:10px;color:var(--color-text-secondary);margin-bottom:4px}
+.report-stat span{color:var(--color-text-primary);font-weight:500}
+.inference-progress{height:3px;background:var(--color-border-tertiary);border-radius:2px;margin-top:6px}
+.inference-fill{height:100%;background:#1D9E75;border-radius:2px;width:0%;transition:width 2s}
+.status-dot{width:6px;height:6px;border-radius:50%;display:inline-block;margin-right:4px}
+.dot-green{background:#1D9E75}
+.dot-amber{background:#BA7517}
+.dot-blue{background:#185FA5}
+.hidden{display:none!important}
+</style>
+
+<h2 class="sr-only">Interface médicale TopBrain — visualisation 3D de segmentation vasculaire cérébrale</h2>
+
+<div class="app">
+  <div class="topbar">
+    <div class="logo">Top<span>Brain</span></div>
+    <div class="badge">Vue Médecin</div>
+    <span style="font-size:12px;color:var(--color-text-secondary)">Patient: —&nbsp;&nbsp;Examen: CTA Cérébral</span>
+    <div class="topbar-actions">
+      <span id="status-text" style="font-size:12px;color:var(--color-text-secondary)"><span class="status-dot dot-amber"></span>En attente</span>
+      <button class="btn" onclick="runInference()">▶ Lancer l'inférence</button>
+      <button class="btn btn-primary" onclick="exportReport()">⬇ Exporter rapport</button>
+    </div>
+  </div>
+
+  <div class="sidebar">
+    <div>
+      <div class="section-label">Fichier NIfTI</div>
+      <div class="upload-zone" id="dropzone" onclick="simulateUpload()">
+        <div class="upload-icon">📁</div>
+        <div class="upload-text">Glisser un fichier .nii.gz<br>ou cliquer pour parcourir</div>
+      </div>
+      <div id="file-info" class="hidden file-loaded">✓ patient_CTA.nii.gz chargé</div>
+    </div>
+
+    <div>
+      <div class="section-label">Métriques de segmentation</div>
+      <div id="metrics-empty" style="font-size:12px;color:var(--color-text-secondary)">Lancer l'inférence pour voir les métriques</div>
+      <div id="metrics-panel" class="hidden">
+        <div class="metric-row">
+          <span class="metric-label">Dice global</span>
+          <span class="metric-value metric-good">0.871</span>
+        </div>
+        <div class="progress-bar"><div class="progress-fill" style="width:87.1%"></div></div>
+        <div class="metric-row" style="margin-top:6px">
+          <span class="metric-label">IoU foreground</span>
+          <span class="metric-value metric-good">0.794</span>
+        </div>
+        <div class="progress-bar"><div class="progress-fill" style="width:79.4%;background:#1D9E75"></div></div>
+        <div class="metric-row" style="margin-top:6px">
+          <span class="metric-label">Classes détectées</span>
+          <span class="metric-value">38 / 41</span>
+        </div>
+        <div class="metric-row">
+          <span class="metric-label">Temps d'inférence</span>
+          <span class="metric-value">4.2 s</span>
+        </div>
+        <div class="metric-row">
+          <span class="metric-label">Volume (mL)</span>
+          <span class="metric-value">128×128×64</span>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <div class="section-label">Classes vasculaires</div>
+      <div id="classes-empty" style="font-size:12px;color:var(--color-text-secondary)">Disponible après inférence</div>
+      <div id="classes-panel" class="hidden">
+        <div class="class-item"><div class="class-dot" style="background:#4A90E2"></div><span class="class-name">Artère cérébrale ant.</span><div class="class-toggle on" onclick="toggleClass(this)"></div></div>
+        <div class="class-item"><div class="class-dot" style="background:#E25454"></div><span class="class-name">Artère cérébrale moy.</span><div class="class-toggle on" onclick="toggleClass(this)"></div></div>
+        <div class="class-item"><div class="class-dot" style="background:#F5A623"></div><span class="class-name">Artère cérébrale post.</span><div class="class-toggle on" onclick="toggleClass(this)"></div></div>
+        <div class="class-item"><div class="class-dot" style="background:#7ED321"></div><span class="class-name">Artère carotide int.</span><div class="class-toggle on" onclick="toggleClass(this)"></div></div>
+        <div class="class-item"><div class="class-dot" style="background:#9B59B6"></div><span class="class-name">Artère basilaire</span><div class="class-toggle on" onclick="toggleClass(this)"></div></div>
+        <div class="class-item"><div class="class-dot" style="background:#1ABC9C"></div><span class="class-name">Artère vertébrale</span><div class="class-toggle on" onclick="toggleClass(this)"></div></div>
+        <div class="class-item"><div class="class-dot" style="background:#E67E22"></div><span class="class-name">Sinus veineux</span><div class="class-toggle on" onclick="toggleClass(this)"></div></div>
+        <div class="class-item"><div class="class-dot" style="background:#95A5A6"></div><span class="class-name">+ 34 autres classes</span><div class="class-toggle on" onclick="toggleClass(this)"></div></div>
+      </div>
+    </div>
+
+    <div style="margin-top:auto">
+      <div class="section-label">Opacité 3D</div>
+      <input type="range" min="10" max="100" value="80" id="opacity-slider" style="width:100%">
+      <div style="font-size:11px;color:var(--color-text-secondary);text-align:right" id="opacity-val">80%</div>
+    </div>
+  </div>
+
+  <div class="main-view">
+    <div class="view-tabs">
+      <div class="tab active" onclick="switchTab('3d',this)">Vue 3D</div>
+      <div class="tab" onclick="switchTab('axial',this)">Axiale</div>
+      <div class="tab" onclick="switchTab('coronal',this)">Coronale</div>
+      <div class="tab" onclick="switchTab('sagittal',this)">Sagittale</div>
+      <div class="tab" onclick="switchTab('multi',this)">Multiplanaire</div>
+    </div>
+    <div class="view-area">
+      <canvas id="c3d" width="460" height="340"></canvas>
+      <div class="multiplanar" id="multi-view" style="display:none;width:100%;height:100%;position:absolute;top:0;left:0">
+        <div class="mp-view"><span class="mp-label">Axiale</span><canvas class="mp-canvas" id="mp-ax" width="220" height="170"></canvas></div>
+        <div class="mp-view"><span class="mp-label">Coronale</span><canvas class="mp-canvas" id="mp-co" width="220" height="170"></canvas></div>
+        <div class="mp-view"><span class="mp-label">Sagittale</span><canvas class="mp-canvas" id="mp-sa" width="220" height="170"></canvas></div>
+        <div class="mp-view"><span class="mp-label">3D</span><canvas class="mp-canvas" id="mp-3d" width="220" height="170"></canvas></div>
+      </div>
+      <div class="view-overlay">
+        <span class="view-badge" id="view-label">3D · Vue isométrique</span>
+        <span class="view-badge" id="seg-badge" style="display:none;background:rgba(15,110,86,0.7);color:#9FE1CB">Segmentation active</span>
+      </div>
+      <div class="controls-hint" id="ctrl-hint">Cliquer-glisser pour rotation · Molette pour zoom</div>
+      <div class="slice-controls" id="slice-ctrl" style="display:none">
+        <span class="slice-label">Coupe</span>
+        <input type="range" class="slice-input" min="0" max="63" value="32" id="slice-slider" oninput="updateSlice(this.value)">
+        <span class="slice-label" id="slice-num">32/64</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="bottombar">
+    <div class="report-card">
+      <div class="report-title">📋 Rapport</div>
+      <div class="report-stat">Patient: <span>Anonyme</span></div>
+      <div class="report-stat">Date: <span id="rpt-date">—</span></div>
+      <div class="report-stat">Modèle: <span>TopBrain v2.1</span></div>
+      <div class="report-stat">Statut: <span id="rpt-status">En attente</span></div>
+      <div class="inference-progress"><div class="inference-fill" id="inf-fill"></div></div>
+    </div>
+    <div class="report-card" style="width:160px">
+      <div class="report-title">⚡ Pipeline ETL</div>
+      <div class="report-stat">Redim.: <span>128×128×64</span></div>
+      <div class="report-stat">Fenêtrage: <span>CT [-200, 400]</span></div>
+      <div class="report-stat">Normalisation: <span>Z-score</span></div>
+      <div class="report-stat">Inférence: <span>Fenêtre glissante</span></div>
+    </div>
+    <div class="report-card" style="width:170px">
+      <div class="report-title">🧠 Segmentation 3D</div>
+      <div class="report-stat">Classes: <span>41 vasculaires</span></div>
+      <div class="report-stat" id="dice-report">Dice: <span>—</span></div>
+      <div class="report-stat" id="iou-report">IoU: <span>—</span></div>
+      <div class="report-stat">GPU: <span>CUDA FP16</span></div>
+    </div>
+    <div class="report-card" style="width:150px">
+      <div class="report-title">🔍 Anomalies détectées</div>
+      <div id="anomalies-empty" style="font-size:11px;color:var(--color-text-secondary)">—</div>
+      <div id="anomalies-list" class="hidden">
+        <div class="report-stat">⚠ <span style="color:#BA7517">Asymétrie MCA</span></div>
+        <div class="report-stat">✓ <span style="color:#0F6E56">ACA normale</span></div>
+        <div class="report-stat">✓ <span style="color:#0F6E56">Basilaire normale</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+var currentTab='3d', segActive=false, animFrame, angle=0, dragging=false, lastX=0, rotX=20, rotY=0, opacity=0.8, sliceVal=32;
+
+var vessels=[
+  {label:'ACA',color:'#4A90E2',x:0,y:0.1},
+  {label:'MCA-L',color:'#E25454',x:-0.35,y:0},
+  {label:'MCA-R',color:'#E25454',x:0.35,y:0},
+  {label:'PCA',color:'#F5A623',x:0.1,y:-0.2},
+  {label:'ICA',color:'#7ED321',x:-0.2,y:0.2},
+  {label:'Basilaire',color:'#9B59B6',x:0,y:-0.35},
+  {label:'Vertébrale',color:'#1ABC9C',x:0.15,y:-0.4},
+  {label:'Sinus',color:'#E67E22',x:0,y:0.35}
+];
+
+function initCanvas(){
+  var c=document.getElementById('c3d');
+  c.addEventListener('mousedown',function(e){dragging=true;lastX=e.clientX;});
+  window.addEventListener('mousemove',function(e){if(dragging){rotY+=(e.clientX-lastX)*0.5;lastX=e.clientX;}});
+  window.addEventListener('mouseup',function(){dragging=false;});
+  c.addEventListener('wheel',function(e){e.preventDefault();},{ passive:false });
+  document.getElementById('opacity-slider').oninput=function(){
+    opacity=this.value/100;
+    document.getElementById('opacity-val').textContent=this.value+'%';
+  };
+  drawBrain();
+  animate();
+}
+
+function animate(){
+  animFrame=requestAnimationFrame(animate);
+  if(!dragging) rotY+=0.3;
+  drawScene();
+}
+
+function drawScene(){
+  if(currentTab==='3d') draw3D();
+}
+
+function draw3D(){
+  var c=document.getElementById('c3d');
+  if(!c) return;
+  var ctx=c.getContext('2d');
+  var w=c.width,h=c.height;
+  ctx.clearRect(0,0,w,h);
+  drawBrainBase(ctx,w,h);
+  if(segActive) drawVessels3D(ctx,w,h);
+}
+
+function drawBrainBase(ctx,w,h){
+  var cx=w/2,cy=h/2;
+  var rad=Math.PI*rotY/180;
+  ctx.save();
+  ctx.translate(cx,cy);
+  var scaleX=1+0.08*Math.cos(rad);
+  ctx.scale(scaleX,1);
+  var g=ctx.createRadialGradient(-20,-30,10,0,0,130);
+  g.addColorStop(0,'rgba(40,50,80,'+opacity+')');
+  g.addColorStop(0.6,'rgba(20,28,55,'+opacity+')');
+  g.addColorStop(1,'rgba(8,12,28,'+opacity+')');
+  ctx.fillStyle=g;
+  ctx.beginPath();
+  ctx.ellipse(0,-5,115,105,0,0,Math.PI*2);
+  ctx.fill();
+  ctx.strokeStyle='rgba(60,90,160,0.3)';
+  ctx.lineWidth=1;
+  ctx.stroke();
+  for(var i=0;i<6;i++){
+    var gy=-60+i*25;
+    ctx.beginPath();
+    ctx.moveTo(-110+Math.abs(gy)*0.3,gy);
+    var cp1x=-40+20*Math.sin(i+rad),cp1y=gy-15;
+    var cp2x=40-15*Math.cos(i+rad),cp2y=gy-8;
+    ctx.bezierCurveTo(cp1x,cp1y,cp2x,cp2y,110-Math.abs(gy)*0.3,gy);
+    ctx.strokeStyle='rgba(70,100,180,0.15)';
+    ctx.lineWidth=1.5;
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function drawVessels3D(ctx,w,h){
+  var cx=w/2,cy=h/2;
+  var rad=Math.PI*rotY/180;
+  vessels.forEach(function(v){
+    var bx=v.x*100*Math.cos(rad);
+    var by=v.y*90;
+    var vx=cx+bx;
+    var vy=cy+by;
+    var depth=(1+Math.sin(rad+v.x*2))/2;
+    var alpha=0.4+depth*0.6;
+    ctx.beginPath();
+    var wx=6+depth*5;
+    ctx.strokeStyle=v.color;
+    ctx.lineWidth=wx;
+    ctx.globalAlpha=alpha*opacity;
+    ctx.lineCap='round';
+    var off=20*Math.sin(rad+v.x);
+    ctx.moveTo(vx-off,vy-20);
+    ctx.bezierCurveTo(vx+off*0.5,vy-5,vx-off*0.3,vy+5,vx+off,vy+25);
+    ctx.stroke();
+    ctx.globalAlpha=alpha*opacity*0.5;
+    ctx.lineWidth=wx*0.4;
+    ctx.moveTo(vx,vy+25);
+    ctx.lineTo(vx+off*0.5,vy+50);
+    ctx.stroke();
+    ctx.globalAlpha=1;
+    if(depth>0.6){
+      ctx.font='9px var(--font-sans)';
+      ctx.fillStyle='rgba(181,212,244,0.8)';
+      ctx.fillText(v.label,vx+6,vy-12);
+    }
+  });
+}
+
+function drawBrain(){draw3D();}
+
+function drawSliceView(canvasId,plane,slice){
+  var c=document.getElementById(canvasId);
+  if(!c) return;
+  var ctx=c.getContext('2d');
+  var w=c.width,h=c.height;
+  ctx.clearRect(0,0,w,h);
+  ctx.fillStyle='#0a0a0f';
+  ctx.fillRect(0,0,w,h);
+  var cx=w/2,cy=h/2;
+  ctx.fillStyle='rgba(20,28,55,0.9)';
+  if(plane==='axial') ctx.ellipse(cx,cy,w*0.38,h*0.42,0,0,Math.PI*2);
+  else if(plane==='coronal') ctx.ellipse(cx,cy,w*0.4,h*0.45,0,0,Math.PI*2);
+  else ctx.ellipse(cx,cy,w*0.35,h*0.48,0,0,Math.PI*2);
+  ctx.beginPath();
+  if(plane==='axial') ctx.ellipse(cx,cy,w*0.38,h*0.42,0,0,Math.PI*2);
+  else if(plane==='coronal') ctx.ellipse(cx,cy,w*0.4,h*0.45,0,0,Math.PI*2);
+  else ctx.ellipse(cx,cy,w*0.35,h*0.48,0,0,Math.PI*2);
+  ctx.fillStyle='#12172e';
+  ctx.fill();
+  ctx.strokeStyle='rgba(60,90,160,0.4)';
+  ctx.lineWidth=1;
+  ctx.stroke();
+  if(segActive){
+    vessels.forEach(function(v,i){
+      var vx=cx+v.x*(w*0.3);
+      var vy=cy+v.y*(h*0.3);
+      ctx.beginPath();
+      ctx.arc(vx,vy,3+Math.random()*2,0,Math.PI*2);
+      ctx.fillStyle=v.color;
+      ctx.globalAlpha=0.8;
+      ctx.fill();
+      ctx.globalAlpha=1;
+      ctx.beginPath();
+      ctx.arc(vx,vy,5+Math.random()*3,0,Math.PI*2);
+      ctx.strokeStyle=v.color;
+      ctx.lineWidth=1.5;
+      ctx.globalAlpha=0.4;
+      ctx.stroke();
+      ctx.globalAlpha=1;
+    });
+  }
+  ctx.strokeStyle='rgba(24,95,165,0.25)';
+  ctx.lineWidth=0.5;
+  ctx.beginPath();ctx.moveTo(cx,0);ctx.lineTo(cx,h);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(0,cy);ctx.lineTo(w,cy);ctx.stroke();
+  ctx.font='9px var(--font-sans)';
+  ctx.fillStyle='rgba(181,212,244,0.4)';
+  if(plane==='axial'){ctx.fillText('R',6,cy+3);ctx.fillText('L',w-14,cy+3);}
+  else if(plane==='coronal'){ctx.fillText('R',6,cy+3);ctx.fillText('L',w-14,cy+3);}
+  else{ctx.fillText('A',cx-4,10);ctx.fillText('P',cx-4,h-4);}
+}
+
+function simulateUpload(){
+  document.getElementById('dropzone').classList.add('hidden');
+  document.getElementById('file-info').classList.remove('hidden');
+}
+
+function runInference(){
+  if(!document.getElementById('file-info').classList.contains('hidden') || true){
+    simulateUpload();
+    document.getElementById('status-text').innerHTML='<span class="status-dot dot-blue"></span>Inférence en cours...';
+    document.getElementById('rpt-status').textContent='En cours...';
+    var fill=document.getElementById('inf-fill');
+    var prog=0;
+    var iv=setInterval(function(){
+      prog+=2;
+      fill.style.width=prog+'%';
+      if(prog>=100){
+        clearInterval(iv);
+        segActive=true;
+        document.getElementById('status-text').innerHTML='<span class="status-dot dot-green"></span>Segmentation complète';
+        document.getElementById('seg-badge').style.display='';
+        document.getElementById('metrics-empty').classList.add('hidden');
+        document.getElementById('metrics-panel').classList.remove('hidden');
+        document.getElementById('classes-empty').classList.add('hidden');
+        document.getElementById('classes-panel').classList.remove('hidden');
+        document.getElementById('anomalies-empty').classList.add('hidden');
+        document.getElementById('anomalies-list').classList.remove('hidden');
+        document.getElementById('rpt-status').textContent='Terminé';
+        document.getElementById('rpt-date').textContent=new Date().toLocaleDateString('fr-FR');
+        document.getElementById('dice-report').innerHTML='Dice: <span>0.871</span>';
+        document.getElementById('iou-report').innerHTML='IoU: <span>0.794</span>';
+        if(currentTab!=='3d') redrawSlices();
+      }
+    },60);
+  }
+}
+
+function redrawSlices(){
+  drawSliceView('mp-ax','axial',sliceVal);
+  drawSliceView('mp-co','coronal',sliceVal);
+  drawSliceView('mp-sa','sagittal',sliceVal);
+}
+
+function switchTab(tab,el){
+  currentTab=tab;
+  document.querySelectorAll('.tab').forEach(function(t){t.classList.remove('active')});
+  el.classList.add('active');
+  var c3d=document.getElementById('c3d');
+  var mv=document.getElementById('multi-view');
+  var sc=document.getElementById('slice-ctrl');
+  var ch=document.getElementById('ctrl-hint');
+  var lbl=document.getElementById('view-label');
+  c3d.style.display='none';
+  mv.style.display='none';
+  sc.style.display='none';
+  ch.style.display='none';
+  if(tab==='3d'){
+    c3d.style.display='block';
+    ch.style.display='block';
+    lbl.textContent='3D · Vue isométrique';
+  } else if(tab==='multi'){
+    mv.style.display='grid';
+    lbl.textContent='Multiplanaire';
+    redrawSlices();
+    drawSliceView('mp-3d','axial',sliceVal);
+  } else {
+    c3d.style.display='block';
+    sc.style.display='flex';
+    lbl.textContent=tab==='axial'?'Axiale':tab==='coronal'?'Coronale':'Sagittale';
+    drawSliceView('c3d',tab,sliceVal);
+    cancelAnimationFrame(animFrame);
+  }
+  if(tab==='3d') animate();
+}
+
+function updateSlice(v){
+  sliceVal=parseInt(v);
+  document.getElementById('slice-num').textContent=v+'/64';
+  drawSliceView('c3d',currentTab,sliceVal);
+}
+
+function toggleClass(el){el.classList.toggle('on');}
+
+function exportReport(){
+  if(segActive){
+    alert('Rapport PDF généré :\nPatient: Anonyme\nDate: '+new Date().toLocaleDateString('fr-FR')+'\nDice: 0.871 | IoU: 0.794\nClasses: 38/41 détectées\nAnomalies: Asymétrie MCA (à confirmer)');
+  } else {
+    alert('Veuillez lancer l\'inférence avant d\'exporter le rapport.');
+  }
+}
+
+initCanvas();
+</script>

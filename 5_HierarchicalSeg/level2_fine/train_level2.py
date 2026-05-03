@@ -1,17 +1,17 @@
 """
 train_level2.py
 ===============
-Level-2 training: segmentation fine 41 classes vasculaires (stage-3).
+Level-2 training: stage-3 segmentation en 7 groupes artériels (+ fond).
 Input 2 canaux : CTA normalisée + carte de familles stage-2 normalisée (÷4).
 
 Collection source : HierarchicalPatients3D_Level2_CTA41_fold1
   (matérialisée par ingest_level2_mongo.py)
   - img_data        : float32  (CTA normalisée)
   - family_map_data : float32  (prédiction stage-2 / 4)
-  - lbl41_data      : uint8    (labels 0-40)
+    - lbl_stage3_data : uint8    (labels 0..7)
 
 Architecture :
-  SwinUNETR(in_channels=2, out_channels=41)
+    SwinUNETR(in_channels=2, out_channels=8)
 
 Usage :
     python 5_HierarchicalSeg/level2_fine/train_level2.py \\
@@ -19,7 +19,7 @@ Usage :
         --target-size "128x128x64" \\
         --partition-file "3_Data_Partitionement/partition_materialized.json" \\
         --fold fold_1 \\
-        --num-classes 41 \\
+        --num-classes 8 \\
         --epochs 300 \\
         --patch-size 64 64 64 \\
         --swin-feature-size 24 \\
@@ -72,12 +72,34 @@ for _d in (ROOT, ROOT / "1_ETL" / "Transform", ROOT / "ETL" / "Transform", ROOT 
 from metrics_dice_iou import dice_iou_per_class                           # noqa: E402
 from monai_augmentation_pipeline import apply_monai_transform, build_monai_transforms  # noqa: E402
 from transform_t3_normalization import normalize_volume                   # noqa: E402
+from stage3_training_improvements import compute_stage3_weights, FamilyPriorLoss  # noqa: E402
 
 
 # =============================================================================
 # Constants
 # =============================================================================
-NUM_CLASSES_DEFAULT = 41   # 0=BG, 1-40=vessels
+NUM_CLASSES_DEFAULT = 8    # 0=BG, 1..7 arterial groups
+
+LABEL41_TO_GROUP: dict[int, int] = {
+    # G1 — Vertébro-Basilaire
+    1: 1, 23: 1, 24: 1, 25: 1, 26: 1, 27: 1, 28: 1, 29: 1, 30: 1,
+    # G2 — Carotides internes + branches directes (incl. OA, AChA)
+    4: 2, 6: 2, 31: 2, 32: 2, 33: 2, 34: 2,
+    # G3 — Artères Cérébrales Moyennes
+    5: 3, 7: 3, 17: 3, 18: 3, 19: 3, 20: 3,
+    # G4 — Artères Cérébrales Antérieures
+    11: 4, 12: 4, 13: 4, 14: 4, 15: 4, 16: 4,
+    # G5 — Artères Cérébrales Postérieures
+    2: 5, 3: 5, 21: 5, 22: 5,
+    # G6 — Communicantes (Polygone de Willis)
+    8: 6, 9: 6, 10: 6,
+    # G7 — Veineux profond / sinus (35..40)
+    35: 7, 36: 7, 37: 7, 38: 7, 39: 7, 40: 7,
+}
+
+GROUP_LUT = np.zeros(64, dtype=np.uint8)
+for _label, _group in LABEL41_TO_GROUP.items():
+    GROUP_LUT[_label] = _group
 
 
 # =============================================================================
@@ -96,14 +118,19 @@ def infer_doc_shape(doc: Dict, default: Tuple[int, int, int] = (128, 128, 64)) -
     return default
 
 
+def remap_lbl41_to_stage3(lbl41: np.ndarray) -> np.ndarray:
+    safe = np.clip(lbl41, 0, GROUP_LUT.shape[0] - 1).astype(np.int64, copy=False)
+    return GROUP_LUT[safe].astype(np.uint8, copy=False)
+
+
 def load_level2_arrays(doc: Dict, num_classes: int) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
-    Retourne (img [H,W,D] float32, family_map [H,W,D] float32, lbl41 [H,W,D] int64).
+    Retourne (img [H,W,D] float32, family_map [H,W,D] float32, lbl_stage3 [H,W,D] int64).
     img       : CTA normalisée 0..1
     family_map: prédiction stage-2 normalisée 0..1 (argmax/4)
-    lbl41     : labels fins 0..40
+    lbl_stage3: labels stage-3 0..6 (6 groupes + fond)
     """
-    required = ("img_data", "family_map_data", "lbl41_data")
+    required = ("img_data", "family_map_data")
     for key in required:
         if key not in doc:
             raise KeyError(
@@ -111,20 +138,34 @@ def load_level2_arrays(doc: Dict, num_classes: int) -> Tuple[np.ndarray, np.ndar
                 f"Avez-vous bien exécuté ingest_level2_mongo.py ?"
             )
 
+    if "lbl_stage3_data" not in doc and "lbl41_data" not in doc:
+        raise KeyError(
+            "Clé manquante 'lbl_stage3_data' (ou fallback 'lbl41_data') dans le document Level-2."
+        )
+
     shape = infer_doc_shape(doc)
 
     img_dtype        = np.dtype(doc.get("img_dtype",        "float32"))
     family_map_dtype = np.dtype(doc.get("family_map_dtype", "float32"))
-    lbl41_dtype      = np.dtype(doc.get("lbl41_dtype",      "uint8"))
+    lbl_stage3_dtype = np.dtype(doc.get("lbl_stage3_dtype", "uint8"))
 
     img        = np.frombuffer(doc["img_data"],        dtype=img_dtype       ).reshape(shape).astype(np.float32, copy=False)
     family_map = np.frombuffer(doc["family_map_data"], dtype=family_map_dtype).reshape(shape).astype(np.float32, copy=False)
-    lbl41      = np.frombuffer(doc["lbl41_data"],      dtype=lbl41_dtype     ).reshape(shape).astype(np.int64,   copy=False)
+    if "lbl_stage3_data" in doc:
+        lbl_stage3 = np.frombuffer(
+            doc["lbl_stage3_data"], dtype=lbl_stage3_dtype
+        ).reshape(shape).astype(np.int64, copy=False)
+    else:
+        lbl41_dtype = np.dtype(doc.get("lbl41_dtype", "uint8"))
+        lbl41 = np.frombuffer(
+            doc["lbl41_data"], dtype=lbl41_dtype
+        ).reshape(shape).astype(np.int64, copy=False)
+        lbl_stage3 = remap_lbl41_to_stage3(lbl41).astype(np.int64, copy=False)
 
-    lbl41 = np.clip(lbl41, 0, num_classes - 1)
+    lbl_stage3 = np.clip(lbl_stage3, 0, num_classes - 1)
     # family_map est déjà normalisée [0..1] par l'ingestion (÷4)
     family_map = np.clip(family_map, 0.0, 1.0)
-    return img, family_map, lbl41
+    return img, family_map, lbl_stage3
 
 
 # =============================================================================
@@ -135,7 +176,7 @@ class Level2MongoDataset(Dataset):
     Retourne (x [2,H,W,D], y [H,W,D]) où :
       x[0] = CTA normalisée
       x[1] = carte de familles stage-2 normalisée [0..1]
-      y    = labels fins 0..40
+    y    = labels stage-3 0..6
     """
 
     def __init__(
@@ -278,6 +319,7 @@ def run_epoch(
     sw_mode: str = "gaussian",
     use_amp: bool = False,
     scaler=None,
+    epoch: int = 9999,
 ) -> float:
     train_mode = optimizer is not None
     model.train(train_mode)
@@ -297,7 +339,11 @@ def run_epoch(
                     inputs=x, roi_size=roi_size, sw_batch_size=sw_batch_size,
                     predictor=model, overlap=sw_overlap, mode=sw_mode,
                 )
-                raw_loss = criterion(logits, y)
+                # Pass family_map (x[:,1:2,...]) and epoch to FamilyPriorLoss
+                if isinstance(criterion, FamilyPriorLoss):
+                    raw_loss = criterion(logits, y, family_map=x[:, 1:2, ...], epoch=epoch)
+                else:
+                    raw_loss = criterion(logits, y)
                 loss = raw_loss / accum_steps if train_mode else raw_loss
 
             if train_mode:
@@ -430,7 +476,7 @@ def load_init_checkpoint(model: nn.Module, ckpt_path: Path) -> Dict:
 # =============================================================================
 def main() -> None:
     p = argparse.ArgumentParser(
-        description="Level-2 training: SwinUNETR(2→41) on HierarchicalPatients3D_Level2 collection"
+        description="Level-2 training: SwinUNETR(2→7) on HierarchicalPatients3D_Level2 collection"
     )
     p.add_argument("--mongo-uri",  default=os.getenv("MONGO_URI", "mongodb://localhost:27017"))
     p.add_argument("--db-name",    default=os.getenv("MONGO_DB_NAME", "TopBrain_DB"))
@@ -594,28 +640,17 @@ def main() -> None:
             raise ValueError(f"--class-weights : {len(vals)} valeurs, attendu {args.num_classes}")
         ce_weight_tensor = torch.tensor(vals, dtype=torch.float32, device=device)
     elif args.auto_class_weights:
-        eps   = 1e-6
-        freqs = train_counts.astype(np.float64) / max(float(train_counts.sum()), 1.0)
-        fg_freqs   = freqs[1:]
-        safe_fg    = np.maximum(fg_freqs, eps)
-        median_fg  = float(np.median(safe_fg))
-        weights    = np.ones(args.num_classes, dtype=np.float32)
-        weights[0] = 0.05            # écraser BG
-        weights[1:] = (median_fg / safe_fg).astype(np.float32)
-        # cap à 20× pour éviter les classes vides d'exploser
-        weights[1:] = np.clip(weights[1:], 0.0, 20.0)
-        ce_weight_tensor = torch.tensor(weights, dtype=torch.float32, device=device)
-        print(f"[info] Auto class weights (median-freq, cap=20) :")
-        print(f"       BG={weights[0]:.3f}  FG min={weights[1:].min():.3f}  "
-              f"max={weights[1:].max():.3f}  median={float(np.median(weights[1:])):.3f}")
-        absent = [c for c in range(1, args.num_classes) if train_counts[c] == 0]
-        if absent:
-            print(f"[warn] {len(absent)} classes absentes dans train → poids cappés à 20. "
-                  f"Classes : {absent[:10]}{'...' if len(absent) > 10 else ''}")
+        # Use new compute_stage3_weights with Tier-based calibration
+        ce_weight_tensor = compute_stage3_weights(train_counts, num_classes=args.num_classes, device=device)
 
     if args.loss == "dicece":
-        criterion = DiceCELossWrapper(
-            lambda_dice=args.lambda_dice, lambda_ce=args.lambda_ce, ce_weight=ce_weight_tensor
+        criterion = FamilyPriorLoss(
+            lambda_dice=args.lambda_dice, lambda_ce=args.lambda_ce,
+            lambda_prior=0.3,  # Set to 0.0 to disable prior and keep original behavior
+            ce_weight=ce_weight_tensor,
+            num_classes=args.num_classes,
+            num_families=8,    # 0=BG + G1..G7
+            prior_warmup_epochs=20,
         )
     else:
         criterion = nn.CrossEntropyLoss(weight=ce_weight_tensor)
@@ -663,6 +698,7 @@ def main() -> None:
             sw_mode=args.sw_mode,
             use_amp=use_amp,
             scaler=scaler,
+            epoch=epoch,
         )
 
         if device.type == "cuda":
@@ -675,6 +711,7 @@ def main() -> None:
             sw_overlap=args.sw_overlap,
             sw_mode=args.sw_mode,
             use_amp=use_amp,
+            epoch=epoch,
         )
 
         metrics = evaluate_metrics(

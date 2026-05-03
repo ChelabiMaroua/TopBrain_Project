@@ -34,18 +34,20 @@ log = logging.getLogger(__name__)
 
 # Mapping label -> groupe anatomique
 LABEL_TO_GROUP: dict[int, int] = {
-    # Groupe 1 : Vertébro-Basilaire
+    # G1 — Vertébro-Basilaire
     1: 1, 23: 1, 24: 1, 25: 1, 26: 1, 27: 1, 28: 1, 29: 1, 30: 1,
-    # Groupe 2 : Carotides Internes
-    4: 2, 6: 2,
-    # Groupe 3 : Artères Cérébrales Moyennes
+    # G2 — Carotides internes + branches directes (OA, AChA)
+    4: 2, 6: 2, 31: 2, 32: 2, 33: 2, 34: 2,
+    # G3 — Artères Cérébrales Moyennes
     5: 3, 7: 3, 17: 3, 18: 3, 19: 3, 20: 3,
-    # Groupe 4 : Artères Cérébrales Antérieures
+    # G4 — Artères Cérébrales Antérieures
     11: 4, 12: 4, 13: 4, 14: 4, 15: 4, 16: 4,
-    # Groupe 5 : Artères Cérébrales Postérieures
+    # G5 — Artères Cérébrales Postérieures
     2: 5, 3: 5, 21: 5, 22: 5,
-    # Groupe 6 : Artères Communicantes
-    8: 6, 9: 6, 10: 6, 31: 6, 32: 6,
+    # G6 — Communicantes (Polygone de Willis)
+    8: 6, 9: 6, 10: 6,
+    # G7 — Système veineux profond / sinus
+    35: 7, 36: 7, 37: 7, 38: 7, 39: 7, 40: 7,
 }
 
 GROUP_INFO: dict[int, dict] = {
@@ -55,6 +57,7 @@ GROUP_INFO: dict[int, dict] = {
     4: {"name": "Anterior cerebral artery",   "color": "#FFE040"},
     5: {"name": "Posterior cerebral artery",  "color": "#FF40FF"},
     6: {"name": "Communicating arteries",     "color": "#40FFFF"},
+    7: {"name": "Venous system (deep/sinuses)", "color": "#A0A0A0"},
 }
 
 # Fenêtrage CT standard pour le cerveau
@@ -72,7 +75,7 @@ def hex_to_rgba(hex_color: str, alpha: float = 0.65) -> tuple:
 
 
 def remap_mask(mask: np.ndarray) -> np.ndarray:
-    """Regroupe les labels individuels en 6 groupes anatomiques."""
+    """Regroupe les labels individuels en 7 groupes anatomiques."""
     remapped = np.zeros_like(mask, dtype=np.uint8)
     for label, group in LABEL_TO_GROUP.items():
         remapped[mask == label] = group
@@ -88,9 +91,9 @@ def window_ct(ct: np.ndarray, center: int = CT_WINDOW["center"],
 
 
 def build_colormap() -> mcolors.ListedColormap:
-    """Construit la colormap des 6 groupes + fond transparent."""
+    """Construit la colormap des 7 groupes + fond transparent."""
     colors = [(0, 0, 0, 0)]  # 0 = fond
-    colors += [hex_to_rgba(GROUP_INFO[g]["color"]) for g in range(1, 7)]
+    colors += [hex_to_rgba(GROUP_INFO[g]["color"]) for g in range(1, 8)]
     return mcolors.ListedColormap(colors)
 
 
@@ -103,7 +106,7 @@ def build_legend_patches() -> list:
             linewidth=0.5,
             label=f"Gr.{g} – {GROUP_INFO[g]['name']}",
         )
-        for g in range(1, 7)
+        for g in range(1, 8)
     ]
 
 
@@ -139,13 +142,13 @@ def find_patient_with_all_groups(mask_dir: Path, required_groups: set = None) ->
 
     Args:
         mask_dir: Dossier contenant les masques NIfTI.
-        required_groups: Ensemble des IDs de groupe à rechercher (défaut: {1..6}).
+        required_groups: Ensemble des IDs de groupe à rechercher (défaut: {1..7}).
 
     Returns:
         Chemin du masque trouvé, ou None.
     """
     if required_groups is None:
-        required_groups = set(range(1, 7))
+        required_groups = set(range(1, 8))
 
     nii_files = sorted(
         f for f in mask_dir.iterdir()
@@ -158,16 +161,31 @@ def find_patient_with_all_groups(mask_dir: Path, required_groups: set = None) ->
 
     log.info(f"Recherche parmi {len(nii_files)} masques…")
 
+    best_mask: Path | None = None
+    best_present: set[int] = set()
+
     for mask_path in nii_files:
         try:
             mask = load_nifti(mask_path)
             remapped = remap_mask(mask)
             present = set(np.unique(remapped)) - {0}
+
+            if len(present) > len(best_present):
+                best_mask = mask_path
+                best_present = set(int(group) for group in present)
+
             if required_groups.issubset(present):
                 log.info(f"Patient trouvé : {mask_path.name} (groupes {sorted(present)})")
                 return mask_path
         except Exception as e:
             log.warning(f"Erreur lors du chargement de {mask_path.name} : {e}")
+
+    if best_mask is not None:
+        log.warning(
+            "Aucun patient ne contient tous les groupes requis; "
+            f"utilisation du meilleur cas disponible : {best_mask.name} (groupes {sorted(best_present)})"
+        )
+        return best_mask
 
     return None
 
@@ -187,7 +205,7 @@ def visualize_slice_2d(
 
     Args:
         ct_slice: Coupe CT 2D (intensités brutes HU).
-        mask_slice: Coupe masque 2D (IDs de groupe 1–6).
+        mask_slice: Coupe masque 2D (IDs de groupe 1–7).
         slice_idx: Index de la coupe (pour le titre).
         title: Titre de la figure.
     """
@@ -207,12 +225,12 @@ def visualize_slice_2d(
 
     # --- Panneau 2 : Masque seul ---
     axes[1].imshow(np.zeros_like(ct_windowed.T), cmap="gray", origin="lower", aspect="equal")
-    axes[1].imshow(mask_slice.T, cmap=cmap, vmin=0, vmax=6, origin="lower", aspect="equal")
+    axes[1].imshow(mask_slice.T, cmap=cmap, vmin=0, vmax=7, origin="lower", aspect="equal")
     axes[1].set_title("Arterial Mask", color="white", fontsize=12, pad=8)
 
     # --- Panneau 3 : Superposition ---
     axes[2].imshow(ct_windowed.T, cmap="gray", origin="lower", aspect="equal")
-    axes[2].imshow(mask_slice.T, cmap=cmap, vmin=0, vmax=6, origin="lower", aspect="equal")
+    axes[2].imshow(mask_slice.T, cmap=cmap, vmin=0, vmax=7, origin="lower", aspect="equal")
     axes[2].set_title("Overlay", color="white", fontsize=12, pad=8)
 
     fig.legend(
@@ -243,7 +261,7 @@ def visualize_3d_matplotlib(mask: np.ndarray, max_points_per_group: int = 3000) 
     Visualisation 3D légère via scatter plot matplotlib.
 
     Args:
-        mask: Volume masque 3D remappé (groupes 1–6).
+        mask: Volume masque 3D remappé (groupes 1–7).
         max_points_per_group: Sous-échantillonnage aléatoire pour la performance.
     """
     try:
@@ -259,7 +277,7 @@ def visualize_3d_matplotlib(mask: np.ndarray, max_points_per_group: int = 3000) 
 
     rng = np.random.default_rng(42)
 
-    for g in range(1, 7):
+    for g in range(1, 8):
         coords = np.argwhere(mask == g)
         if len(coords) == 0:
             continue
@@ -337,7 +355,7 @@ def visualize_napari(ct: np.ndarray, mask: np.ndarray) -> None:
         opacity=0.8,
     )
     # Assigner les couleurs exactes (format attendu : {label_id: hex_str})
-    label_layer.color = {g: GROUP_INFO[g]["color"] for g in range(1, 7)}
+    label_layer.color = {g: GROUP_INFO[g]["color"] for g in range(1, 8)}
 
     # Centroïdes avec texte anatomique
     point_coords, point_labels = [], []

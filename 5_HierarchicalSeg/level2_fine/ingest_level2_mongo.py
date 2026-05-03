@@ -1,7 +1,7 @@
 """
 ingest_level2_mongo.py
 ======================
-Matérialise la collection Level-2 (stage-3 : 41 classes fines) à partir de :
+Matérialise la collection Level-2 (stage-3 : 6 groupes artériels) à partir de :
   - La collection Level-1 `HierarchicalPatients3D_Level1_CTA41` :
       img_data, mask_n0_data, shape, patient_id, target_size
   - La collection source  `MultiClassPatients3D_Binary_CTA41` :
@@ -12,7 +12,7 @@ Matérialise la collection Level-2 (stage-3 : 41 classes fines) à partir de :
 Document produit dans la collection de destination :
   - img_data        : float32 bytes — CTA normalisée (copié depuis Level-1)
   - family_map_data : float32 bytes — prédiction stage-2 normalisée (÷4, range 0..1)
-  - lbl41_data      : uint8 bytes  — labels 41-classes (0-40) resizés à target_size
+    - lbl_stage3_data : uint8 bytes  — labels stage-3 (0=BG, 1..6 groupes)
   - shape           : [H, W, D]
   - patient_id      : str (zero-padded)
   - target_size     : "128x128x64"
@@ -61,14 +61,37 @@ sys.path.insert(0, str(ROOT / "4_Unet3D"))
 from transform_t3_normalization import normalize_volume  # noqa: E402
 
 NUM_CLASSES_STAGE2 = 5   # familles Level-1
-NUM_CLASSES_STAGE3 = 41  # classes fines Level-2 (0=BG, 1-40=vaisseaux)
+NUM_CLASSES_STAGE3 = 8   # stage-3 groups (0=BG, 1..7)
 
 HEADER_LINE = "─" * 70
 
 
+# 41-class labels (TopBrain) -> 6 arterial groups (+ background=0)
+LABEL41_TO_GROUP: dict[int, int] = {
+    # G1 — Vertébro-Basilaire
+    1: 1, 23: 1, 24: 1, 25: 1, 26: 1, 27: 1, 28: 1, 29: 1, 30: 1,
+    # G2 — Carotides internes + branches directes (incl. OA, AChA)
+    4: 2, 6: 2, 31: 2, 32: 2, 33: 2, 34: 2,
+    # G3 — Artères Cérébrales Moyennes
+    5: 3, 7: 3, 17: 3, 18: 3, 19: 3, 20: 3,
+    # G4 — Artères Cérébrales Antérieures
+    11: 4, 12: 4, 13: 4, 14: 4, 15: 4, 16: 4,
+    # G5 — Artères Cérébrales Postérieures
+    2: 5, 3: 5, 21: 5, 22: 5,
+    # G6 — Communicantes (Polygone de Willis)
+    8: 6, 9: 6, 10: 6,
+    # G7 — Veineux profond / sinus (35..40)
+    35: 7, 36: 7, 37: 7, 38: 7, 39: 7, 40: 7,
+}
+
+GROUP_LUT = np.zeros(64, dtype=np.uint8)
+for _label, _group in LABEL41_TO_GROUP.items():
+    GROUP_LUT[_label] = _group
+
+
 # ─── CLI ──────────────────────────────────────────────────────────────────────
 def parse_args() -> argparse.Namespace:
-    p = argparse.ArgumentParser(description="Ingestion Level-2 (41 classes) MongoDB")
+    p = argparse.ArgumentParser(description="Ingestion Level-2 (stage-3: 6 groupes) MongoDB")
     p.add_argument("--mongo-uri",  default=os.getenv("MONGO_URI", "mongodb://localhost:27017"))
     p.add_argument("--db-name",    default=os.getenv("MONGO_DB_NAME", "TopBrain_DB"))
     p.add_argument("--stage2-checkpoint", required=True,
@@ -78,7 +101,7 @@ def parse_args() -> argparse.Namespace:
                    help="Collection Level-1 (source img_data + mask_n0_data).")
     p.add_argument("--src-collection",
                    default=os.getenv("TOPBRAIN_3D_BINARY_COLLECTION", "MultiClassPatients3D_Binary_CTA41"),
-                   help="Collection source (contient lbl_path → NIfTI 41 classes).")
+                   help="Collection source (contient lbl_path → NIfTI 41 classes, remappes vers 6 groupes).")
     p.add_argument("--dst-collection", default="HierarchicalPatients3D_Level2_CTA41",
                    help="Collection de destination Level-2.")
     p.add_argument("--target-size", default="128x128x64")
@@ -190,7 +213,7 @@ def load_and_resize_lbl41(
         arr = zoom(arr.astype(np.float32), zoom_factors, order=0).astype(np.int32)
 
     # Clamp 0-40
-    arr = np.clip(arr, 0, NUM_CLASSES_STAGE3 - 1).astype(np.uint8)
+    arr = np.clip(arr, 0, 40).astype(np.uint8)
 
     # Vérification classes non vides
     unique_cls = np.unique(arr)
@@ -198,6 +221,12 @@ def load_and_resize_lbl41(
         raise RuntimeError(f"Label uniquement classe {unique_cls} après resize — pathologique")
 
     return arr
+
+
+def remap_lbl41_to_stage3(lbl41: np.ndarray) -> np.ndarray:
+    """Vectorized remap from 41-class labels to stage-3 group labels (0..7)."""
+    safe = np.clip(lbl41, 0, GROUP_LUT.shape[0] - 1).astype(np.int64, copy=False)
+    return GROUP_LUT[safe].astype(np.uint8, copy=False)
 
 
 # ─── MongoDB ──────────────────────────────────────────────────────────────────
@@ -245,7 +274,7 @@ def upsert_doc(uri: str, db_name: str, dst_coll: str, doc: Dict) -> None:
 
 # ─── QC ───────────────────────────────────────────────────────────────────────
 def qc_lbl41(lbl: np.ndarray) -> None:
-    counts = np.bincount(lbl.ravel(), minlength=NUM_CLASSES_STAGE3)
+    counts = np.bincount(lbl.ravel(), minlength=41)
     n_present = int(np.sum(counts[1:] > 0))
     if n_present < 3:
         raise RuntimeError(
@@ -254,6 +283,16 @@ def qc_lbl41(lbl: np.ndarray) -> None:
         )
     print(f"    [QC] {n_present}/40 classes FG présentes  "
           f"BG={counts[0]:,}  total_fg={counts[1:].sum():,}")
+
+
+def qc_stage3(lbl_stage3: np.ndarray) -> None:
+    counts = np.bincount(lbl_stage3.ravel(), minlength=NUM_CLASSES_STAGE3)
+    n_present = int(np.sum(counts[1:] > 0))
+    n_groups = NUM_CLASSES_STAGE3 - 1
+    print(
+        f"    [QC] stage-3 groupes présents: {n_present}/{n_groups} "
+        f"| dist={counts.tolist()}"
+    )
 
 
 # ─── Main ─────────────────────────────────────────────────────────────────────
@@ -265,7 +304,7 @@ def main() -> None:
     ckpt_name    = Path(args.stage2_checkpoint).stem
 
     print(f"\n{HEADER_LINE}")
-    print("INGESTION LEVEL-2 (41 classes fines)")
+    print("INGESTION LEVEL-2 (stage-3: 6 groupes artériels)")
     print(HEADER_LINE)
     print(f"  Device          : {device}")
     print(f"  Stage-2 ckpt    : {args.stage2_checkpoint}")
@@ -353,15 +392,21 @@ def main() -> None:
             lbl41 = load_and_resize_lbl41(lbl_path, target_shape)
             qc_lbl41(lbl41)
 
+            # ── Remap vers stage-3 (6 groupes) ─────────────────────────────
+            lbl_stage3 = remap_lbl41_to_stage3(lbl41)
+            qc_stage3(lbl_stage3)
+
             # ── Statistiques classes ───────────────────────────────────────
             family_argmax_int = (family_map * 4.0).round().astype(np.uint8)
             family_counts = np.bincount(family_argmax_int.ravel(), minlength=5)
-            lbl41_counts  = np.bincount(lbl41.ravel(), minlength=NUM_CLASSES_STAGE3)
+            lbl41_counts  = np.bincount(lbl41.ravel(), minlength=41)
             n_fg_present  = int(np.sum(lbl41_counts[1:] > 0))
+            lbl_stage3_counts = np.bincount(lbl_stage3.ravel(), minlength=NUM_CLASSES_STAGE3)
 
             print(f"    family_pred_dist : {family_counts.tolist()}")
             print(f"    lbl41 classes présentes : {n_fg_present}/40  "
                   f"total_fg={lbl41_counts[1:].sum():,}")
+            print(f"    lbl_stage3_dist : {lbl_stage3_counts.tolist()}")
 
             # ── Sérialisation ──────────────────────────────────────────────
             doc = {
@@ -372,12 +417,15 @@ def main() -> None:
                 "img_dtype":           "float32",
                 "family_map_data":     family_map.tobytes(),             # float32
                 "family_map_dtype":    "float32",
-                "lbl41_data":          lbl41.tobytes(),                  # uint8
-                "lbl41_dtype":         "uint8",
+                "lbl_stage3_data":     lbl_stage3.tobytes(),             # uint8
+                "lbl_stage3_dtype":    "uint8",
+                "stage3_num_classes":  NUM_CLASSES_STAGE3,
+                "stage3_mapping":      "6_groups_v1",
                 "stage2_checkpoint":   ckpt_name,
                 "lbl_path":            lbl_path,
                 "n_fg_classes_present": n_fg_present,
                 "lbl41_class_counts":  lbl41_counts.tolist(),
+                "lbl_stage3_counts":   lbl_stage3_counts.tolist(),
                 "family_map_counts":   family_counts.tolist(),
                 "ingested_at":         time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
             }
