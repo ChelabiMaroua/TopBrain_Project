@@ -4,12 +4,12 @@
   "target_size": "128x128x64",
   "counts": {
     "processed": 25,
-    "inserted": 0,
+    "inserted": 25,
     "skipped_existing": 0,
     "skipped_no_mask": 0,
     "errors": 0
   },
-  "elapsed_sec": 10.59,
+  "elapsed_sec": 7.76,
   "patients": [
     {
       "patient_id": "001",

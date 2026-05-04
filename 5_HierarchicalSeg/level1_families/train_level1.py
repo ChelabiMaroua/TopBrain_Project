@@ -224,6 +224,10 @@ class Level1MongoDataset(Dataset):
             mask = (stacked_aug[1] > 0.5).astype(np.float32, copy=False)
             lbl = np.clip(lbl_aug, 0, self.num_classes - 1).astype(np.int64, copy=False)
 
+        # Simulate imperfect stage-1 priors to reduce train/inference domain shift.
+        if self.augment and np.random.rand() < 0.20:
+            mask = np.zeros_like(mask, dtype=np.float32)
+
         x = torch.from_numpy(np.stack([img, mask], axis=0)).float()
         y = torch.from_numpy(lbl).long()
         return x, y

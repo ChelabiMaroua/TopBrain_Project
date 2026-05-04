@@ -15,8 +15,8 @@ produces a single document in the destination collection
   - img_data   : bytes  (unchanged, copied as-is from the source doc)
   - mask_n0_data : bytes (Stage-1 binary mask resized to target_size with
                           NEAREST-NEIGHBOR interpolation, stored as uint8)
-  - lbl_data   : bytes  (original 41-class label remapped to 5 families:
-                          0=bg, 1=CoW, 2=Ant/Mid, 3=Post, 4=Vein, as uint8)
+    - lbl_data   : bytes  (original 41-class label remapped to 8 families:
+                                                    0=bg, 1..7=G1..G7, as uint8)
 
 The source document's img_data is copied byte-for-byte, which guarantees
 that the Level-1 input stays perfectly aligned with what the Stage-1
@@ -55,29 +55,53 @@ from pymongo.errors import BulkWriteError
 load_dotenv()
 
 # =============================================================================
-# Family mapping: 41 classes (0..40) -> 5 families (0..4)
+# Family mapping: 41 classes (0..40) -> 8 families (0..7)
 # =============================================================================
-# Based on TopBrain label ordering:
-#   0        : background
-#   1..10    : CoW core
-#   11..20   : Anterior / Middle arteries
-#   21..34   : Posterior / infra-tentorial arteries
-#   35..40   : Cerebral veins
+# G0 = background
+# G1 = Vertebro-Basilar            : BA, VA L/R, SCA L/R, AICA L/R, PICA L/R
+# G2 = Internal carotids           : ICA L/R, AChA L/R, OA L/R
+# G3 = Middle cerebral arteries    : M1 L/R, M2 L/R, M3 L/R
+# G4 = Anterior cerebral arteries  : A1A2 L/R, A3 L/R, 3rd-A2, 3rd-A3
+# G5 = Posterior cerebral arteries : P1P2 L/R, P3P4 L/R
+# G6 = Communicating arteries      : Pcom L/R, Acom
+# G7 = Venous system               : VoG, StS, ICVs, BVR L/R, SSS
 # -----------------------------------------------------------------------------
 FAMILY_LUT: np.ndarray = np.zeros(64, dtype=np.uint8)  # oversized for safety
-for cls in range(1, 11):
+# G1 — Vertebro-Basilar
+for cls in [1, 23, 24, 25, 26, 27, 28, 29, 30]:
     FAMILY_LUT[cls] = 1
-for cls in range(11, 21):
+# G2 — Internal carotids + direct branches
+for cls in [4, 6, 31, 32, 33, 34]:
     FAMILY_LUT[cls] = 2
-for cls in range(21, 35):
+# G3 — MCA
+for cls in [5, 7, 17, 18, 19, 20]:
     FAMILY_LUT[cls] = 3
-for cls in range(35, 41):
+# G4 — ACA
+for cls in [11, 12, 13, 14, 15, 16]:
     FAMILY_LUT[cls] = 4
+# G5 — PCA
+for cls in [2, 3, 21, 22]:
+    FAMILY_LUT[cls] = 5
+# G6 — Communicating arteries (CoW junctions)
+for cls in [8, 9, 10]:
+    FAMILY_LUT[cls] = 6
+# G7 — Deep venous / sinuses
+for cls in [35, 36, 37, 38, 39, 40]:
+    FAMILY_LUT[cls] = 7
 
-NUM_FAMILIES = 5
-FAMILY_NAMES = {0: "background", 1: "CoW", 2: "Ant_Mid", 3: "Post", 4: "Vein"}
+NUM_FAMILIES = 8
+FAMILY_NAMES = {
+    0: "background",
+    1: "G1_VertBasil",
+    2: "G2_Carotids",
+    3: "G3_MCA",
+    4: "G4_ACA",
+    5: "G5_PCA",
+    6: "G6_Comm",
+    7: "G7_Venous",
+}
 
-SRC_FAMILY_MAPPING_VERSION = "v1"  # bump if FAMILY_LUT ever changes
+SRC_FAMILY_MAPPING_VERSION = "v2"  # bump if FAMILY_LUT ever changes
 
 
 # =============================================================================
@@ -154,7 +178,7 @@ def resize_nearest_3d(
 
 
 def remap_labels_to_families(lbl: np.ndarray) -> np.ndarray:
-    """Vectorized 41 -> 5 family remap using a precomputed LUT."""
+    """Vectorized 41 -> 8 family remap using a precomputed LUT."""
     # Clip defensively in case a stray label > 40 slipped through.
     safe = np.clip(lbl, 0, FAMILY_LUT.shape[0] - 1).astype(np.int64, copy=False)
     return FAMILY_LUT[safe]
@@ -173,7 +197,7 @@ def load_multiclass_label_target(
     target_shape: Tuple[int, int, int],
 ) -> Tuple[np.ndarray, Dict[str, object]]:
     """
-    Load the authoritative 41-class label volume, remap it to 5 families,
+    Load the authoritative 41-class label volume, remap it to 8 families,
     then resize it to target_shape using nearest-neighbor interpolation.
 
     Preferred source is lbl_path (native NIfTI on disk). We only fall back to
@@ -238,6 +262,7 @@ def ingest_one_patient(
     target_size: str,
     target_shape: Tuple[int, int, int],
     stage1_checkpoint: str,
+    fallback_mask_from_label: bool = False,
 ) -> Tuple[Optional[Dict], Dict]:
     """
     Build the Level-1 document for one patient.
@@ -257,16 +282,24 @@ def ingest_one_patient(
     img_dtype = np.dtype(src_doc.get("img_dtype", "float32"))
     img_bytes: bytes = bytes(src_doc["img_data"])  # kept raw for the new doc
 
-    # -- 2. Load stage-1 mask (at NATIVE resolution), resize to target_size ---
-    mask_path = Path(manifest_entry["mask_path"])
-    if not mask_path.exists():
+    # -- 2. Load authoritative 41-class labels, remap to 8 families ----------
+    fam_lbl, label_info = load_multiclass_label_target(src_doc, target_shape)
+
+    # -- 3. Load stage-1 mask (at NATIVE resolution), resize to target_size ---
+    mask_source = "stage1_manifest"
+    mask_path = Path(manifest_entry.get("mask_path", ""))
+    if mask_path and mask_path.exists():
+        native_mask = load_mask_nifti(mask_path)
+        resized_mask = resize_nearest_3d(native_mask, target_shape).astype(np.uint8, copy=False)
+    elif fallback_mask_from_label:
+        # Fallback used only when stage-1 masks are unavailable locally.
+        # This keeps pipeline runnable while preserving a clear provenance flag.
+        native_mask = (fam_lbl > 0).astype(np.uint8, copy=False)
+        resized_mask = native_mask
+        mask_source = "gt_label_fallback"
+    else:
         stats["error"] = f"mask file missing: {mask_path}"
         return None, stats
-    native_mask = load_mask_nifti(mask_path)
-    resized_mask = resize_nearest_3d(native_mask, target_shape).astype(np.uint8, copy=False)
-
-    # -- 3. Load authoritative 41-class labels, remap to 5 families ----------
-    fam_lbl, label_info = load_multiclass_label_target(src_doc, target_shape)
     if fam_lbl.shape != shape or resized_mask.shape != shape:
         stats["error"] = (
             f"geometry mismatch: img={shape} lbl={fam_lbl.shape} mask={resized_mask.shape}"
@@ -274,7 +307,7 @@ def ingest_one_patient(
         return None, stats
 
     unique_classes = np.unique(fam_lbl)
-    if not set(unique_classes.tolist()).issubset({0, 1, 2, 3, 4}):
+    if not set(unique_classes.tolist()).issubset(set(range(NUM_FAMILIES))):
         stats["error"] = f"unexpected label ids after remap: {unique_classes.tolist()}"
         return None, stats
 
@@ -295,6 +328,7 @@ def ingest_one_patient(
         "label_fg_voxels": lbl_fg,
         "mask_recall_vs_gt": round(mask_recall, 6),
         "native_mask_shape": list(native_mask.shape),
+        "mask_source": mask_source,
         "label_unique": [int(v) for v in unique_classes.tolist()],
         **label_info,
     })
@@ -316,6 +350,7 @@ def ingest_one_patient(
             "source_collection": "MultiClassPatients3D_Binary_CTA41",
             "stage1_checkpoint": stage1_checkpoint,
             "stage1_mask_path": str(mask_path),
+            "stage1_mask_source": mask_source,
             "stage1_mask_fg_voxels": mask_fg,
             "stage1_mask_recall_vs_gt": round(mask_recall, 6),
             "stage1_mask_threshold": manifest_entry.get("threshold"),
@@ -356,7 +391,7 @@ def existing_patient_ids(coll: Collection) -> set:
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Ingest Level-1 hierarchical segmentation collection "
-                    "(img + stage-1 mask + 5-family labels)"
+                    "(img + stage-1 mask + 8-family labels)"
     )
     parser.add_argument("--mongo-uri", default=os.getenv("MONGO_URI", "mongodb://localhost:27017"))
     parser.add_argument("--db-name", default=os.getenv("MONGO_DB_NAME", "TopBrain_DB"))
@@ -385,6 +420,14 @@ def main() -> None:
     )
     parser.add_argument("--overwrite", action="store_true",
                         help="Re-ingest patients already present in the destination collection.")
+    parser.add_argument(
+        "--fallback-mask-from-label",
+        action="store_true",
+        help=(
+            "If stage-1 mask file is missing, derive binary mask from GT labels (lbl>0). "
+            "Use only when stage-1 outputs/checkpoint are unavailable."
+        ),
+    )
     parser.add_argument("--dry-run", action="store_true",
                         help="Do everything except the insert/replace into Mongo.")
     parser.add_argument("--max-patients", type=int, default=0,
@@ -473,6 +516,7 @@ def main() -> None:
                 target_size=args.target_size,
                 target_shape=target_shape,
                 stage1_checkpoint=args.stage1_checkpoint_name,
+                fallback_mask_from_label=args.fallback_mask_from_label,
             )
         except Exception as exc:  # noqa: BLE001
             counts["errors"] += 1
