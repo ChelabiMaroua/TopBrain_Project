@@ -7,8 +7,8 @@
       128,
       64
     ],
-    "foreground_voxels": 4543,
-    "foreground_ratio": 0.00433254
+    "foreground_voxels": 203407,
+    "foreground_ratio": 0.19398403
   },
   {
     "patient_id": "002",
@@ -18,8 +18,8 @@
       128,
       64
     ],
-    "foreground_voxels": 6509,
-    "foreground_ratio": 0.00620747
+    "foreground_voxels": 195346,
+    "foreground_ratio": 0.18629646
   },
   {
     "patient_id": "003",
@@ -29,8 +29,8 @@
       128,
       64
     ],
-    "foreground_voxels": 4064,
-    "foreground_ratio": 0.00387573
+    "foreground_voxels": 164067,
+    "foreground_ratio": 0.15646648
   },
   {
     "patient_id": "004",
@@ -40,8 +40,8 @@
       128,
       64
     ],
-    "foreground_voxels": 4814,
-    "foreground_ratio": 0.00459099
+    "foreground_voxels": 186245,
+    "foreground_ratio": 0.17761707
   },
   {
     "patient_id": "005",
@@ -51,8 +51,8 @@
       128,
       64
     ],
-    "foreground_voxels": 4895,
-    "foreground_ratio": 0.00466824
+    "foreground_voxels": 198599,
+    "foreground_ratio": 0.18939877
   },
   {
     "patient_id": "006",
@@ -62,8 +62,8 @@
       128,
       64
     ],
-    "foreground_voxels": 2816,
-    "foreground_ratio": 0.00268555
+    "foreground_voxels": 192245,
+    "foreground_ratio": 0.18333912
   },
   {
     "patient_id": "007",
@@ -73,8 +73,8 @@
       128,
       64
     ],
-    "foreground_voxels": 3679,
-    "foreground_ratio": 0.00350857
+    "foreground_voxels": 191230,
+    "foreground_ratio": 0.18237114
   },
   {
     "patient_id": "008",
@@ -84,8 +84,8 @@
       128,
       64
     ],
-    "foreground_voxels": 2855,
-    "foreground_ratio": 0.00272274
+    "foreground_voxels": 175172,
+    "foreground_ratio": 0.16705704
   },
   {
     "patient_id": "010",
@@ -95,8 +95,8 @@
       128,
       64
     ],
-    "foreground_voxels": 2828,
-    "foreground_ratio": 0.00269699
+    "foreground_voxels": 192689,
+    "foreground_ratio": 0.18376255
   },
   {
     "patient_id": "011",
@@ -106,8 +106,8 @@
       128,
       64
     ],
-    "foreground_voxels": 5083,
-    "foreground_ratio": 0.00484753
+    "foreground_voxels": 205105,
+    "foreground_ratio": 0.19560337
   },
   {
     "patient_id": "012",
@@ -117,8 +117,8 @@
       128,
       64
     ],
-    "foreground_voxels": 5993,
-    "foreground_ratio": 0.00571537
+    "foreground_voxels": 209377,
+    "foreground_ratio": 0.19967747
   },
   {
     "patient_id": "013",
@@ -128,8 +128,8 @@
       128,
       64
     ],
-    "foreground_voxels": 3909,
-    "foreground_ratio": 0.00372791
+    "foreground_voxels": 168907,
+    "foreground_ratio": 0.16108227
   },
   {
     "patient_id": "014",
@@ -139,8 +139,8 @@
       128,
       64
     ],
-    "foreground_voxels": 5357,
-    "foreground_ratio": 0.00510883
+    "foreground_voxels": 200322,
+    "foreground_ratio": 0.19104195
   },
   {
     "patient_id": "015",
@@ -150,8 +150,8 @@
       128,
       64
     ],
-    "foreground_voxels": 3482,
-    "foreground_ratio": 0.00332069
+    "foreground_voxels": 185044,
+    "foreground_ratio": 0.17647171
   },
   {
     "patient_id": "016",
@@ -161,8 +161,8 @@
       128,
       64
     ],
-    "foreground_voxels": 3120,
-    "foreground_ratio": 0.00297546
+    "foreground_voxels": 195266,
+    "foreground_ratio": 0.18622017
   },
   {
     "patient_id": "017",
@@ -172,8 +172,8 @@
       128,
       64
     ],
-    "foreground_voxels": 4421,
-    "foreground_ratio": 0.00421619
+    "foreground_voxels": 198319,
+    "foreground_ratio": 0.18913174
   },
   {
     "patient_id": "018",
@@ -183,8 +183,8 @@
       128,
       64
     ],
-    "foreground_voxels": 3986,
-    "foreground_ratio": 0.00380135
+    "foreground_voxels": 209030,
+    "foreground_ratio": 0.19934654
   },
   {
     "patient_id": "020",
@@ -194,8 +194,8 @@
       128,
       64
     ],
-    "foreground_voxels": 3963,
-    "foreground_ratio": 0.00377941
+    "foreground_voxels": 189822,
+    "foreground_ratio": 0.18102837
   },
   {
     "patient_id": "021",
@@ -205,8 +205,8 @@
       128,
       64
     ],
-    "foreground_voxels": 5630,
-    "foreground_ratio": 0.00536919
+    "foreground_voxels": 180763,
+    "foreground_ratio": 0.17238903
   },
   {
     "patient_id": "022",
@@ -216,8 +216,8 @@
       128,
       64
     ],
-    "foreground_voxels": 7370,
-    "foreground_ratio": 0.00702858
+    "foreground_voxels": 203569,
+    "foreground_ratio": 0.19413853
   },
   {
     "patient_id": "023",
@@ -227,8 +227,8 @@
       128,
       64
     ],
-    "foreground_voxels": 2970,
-    "foreground_ratio": 0.00283241
+    "foreground_voxels": 192330,
+    "foreground_ratio": 0.18342018
   },
   {
     "patient_id": "024",
@@ -238,8 +238,8 @@
       128,
       64
     ],
-    "foreground_voxels": 4600,
-    "foreground_ratio": 0.0043869
+    "foreground_voxels": 174338,
+    "foreground_ratio": 0.16626167
   },
   {
     "patient_id": "025",
@@ -249,8 +249,8 @@
       128,
       64
     ],
-    "foreground_voxels": 4753,
-    "foreground_ratio": 0.00453281
+    "foreground_voxels": 191659,
+    "foreground_ratio": 0.18278027
   },
   {
     "patient_id": "026",
@@ -260,8 +260,8 @@
       128,
       64
     ],
-    "foreground_voxels": 6131,
-    "foreground_ratio": 0.00584698
+    "foreground_voxels": 178427,
+    "foreground_ratio": 0.17016125
   },
   {
     "patient_id": "027",
@@ -271,7 +271,7 @@
       128,
       64
     ],
-    "foreground_voxels": 3617,
-    "foreground_ratio": 0.00344944
+    "foreground_voxels": 184842,
+    "foreground_ratio": 0.17627907
   }
 ]
