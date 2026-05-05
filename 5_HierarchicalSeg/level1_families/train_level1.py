@@ -30,6 +30,9 @@ import time
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
+import matplotlib
+matplotlib.use("Agg")  # backend non-interactif, pas de tkinter
+
 import numpy as np
 import torch
 import torch.nn as nn

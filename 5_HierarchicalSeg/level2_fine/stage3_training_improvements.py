@@ -149,13 +149,21 @@ def compute_stage3_weights(
     if device is not None:
         tensor = tensor.to(device)
 
+    # Filter tier indices to valid range for current num_classes
+    valid_A = [c for c in TIER_A if c < num_classes]
+    valid_B = [c for c in TIER_B if c < num_classes]
+    valid_C = [c for c in TIER_C if c < num_classes]
+
     print("[stage3_weights] Tier breakdown :")
-    print(f"  Tier A ({len(TIER_A)} classes) → mean={weights[TIER_A].mean():.3f}  "
-          f"min={weights[TIER_A].min():.3f}  max={weights[TIER_A].max():.3f}")
-    print(f"  Tier B ({len(TIER_B)} classes) → mean={weights[TIER_B].mean():.3f}  "
-          f"min={weights[TIER_B].min():.3f}  max={weights[TIER_B].max():.3f}")
-    print(f"  Tier C ({len(TIER_C)} classes) → mean={weights[TIER_C].mean():.3f}  "
-          f"(sub-voxel, poids volontairement faibles)")
+    if valid_A:
+        print(f"  Tier A ({len(valid_A)} classes in range) → mean={weights[valid_A].mean():.3f}  "
+              f"min={weights[valid_A].min():.3f}  max={weights[valid_A].max():.3f}")
+    if valid_B:
+        print(f"  Tier B ({len(valid_B)} classes in range) → mean={weights[valid_B].mean():.3f}  "
+              f"min={weights[valid_B].min():.3f}  max={weights[valid_B].max():.3f}")
+    if valid_C:
+        print(f"  Tier C ({len(valid_C)} classes in range) → mean={weights[valid_C].mean():.3f}  "
+              f"(sub-voxel, poids volontairement faibles)")
     print(f"  BG     weight = {weights[0]:.3f}")
 
     return tensor
@@ -314,7 +322,7 @@ class FamilyPriorLoss(nn.Module):
 
         # Pour chaque voxel, lookup du vecteur forbidden [C]
         # forbidden_mask : [num_families, C]  →  lookup → [B, H, W, D, C]
-        forbidden_per_voxel = self.forbidden_mask[fam_idx]           # [B, H, W, D, C]
+        forbidden_per_voxel = self.forbidden_mask.to(fam_idx.device)[fam_idx]  # [B, H, W, D, C]
         # Transposer en [B, C, H, W, D] pour aligner avec les logits
         forbidden_per_voxel = forbidden_per_voxel.permute(0, 4, 1, 2, 3)  # [B, C, H, W, D]
 

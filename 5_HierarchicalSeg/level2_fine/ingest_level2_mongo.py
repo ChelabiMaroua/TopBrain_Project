@@ -107,6 +107,8 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--target-size", default="128x128x64")
     p.add_argument("--patch-size",         type=int, nargs=3, default=[64, 64, 64])
     p.add_argument("--swin-feature-size",  type=int, default=24)
+    p.add_argument("--num-classes-stage2", type=int, default=5,
+                   help="Nombre de classes de sortie du checkpoint stage-2 (default=5, utiliser 8 si le ckpt a été entraîné avec --num-classes 8).")
     p.add_argument("--sw-overlap",         type=float, default=0.5)
     p.add_argument("--amp",   action="store_true")
     p.add_argument("--overwrite", action="store_true",
@@ -137,10 +139,10 @@ def infer_shape(doc: Dict) -> Tuple[int, int, int]:
 
 
 # ─── Stage-2 model ────────────────────────────────────────────────────────────
-def build_stage2_model(feature_size: int, device: torch.device) -> torch.nn.Module:
+def build_stage2_model(feature_size: int, device: torch.device, num_classes: int = NUM_CLASSES_STAGE2) -> torch.nn.Module:
     model = SwinUNETR(
         in_channels=2,
-        out_channels=NUM_CLASSES_STAGE2,
+        out_channels=num_classes,
         feature_size=feature_size,
         use_checkpoint=False,
         spatial_dims=3,
@@ -168,8 +170,9 @@ def predict_family_map(
     overlap: float,
     device: torch.device,
     use_amp: bool,
+    num_classes: int = NUM_CLASSES_STAGE2,
 ) -> np.ndarray:
-    """Retourne la carte de familles (0-4) en float32 normalisée /4 → [0..1]."""
+    """Retourne la carte de familles (0-4) en float32 normalisée / (num_classes-1) → [0..1]."""
     x = torch.from_numpy(np.stack([img, mask], axis=0)).float().unsqueeze(0).to(device)
     with torch.autocast(device_type=device.type, enabled=use_amp and device.type == "cuda"):
         logits = sliding_window_inference(
@@ -181,7 +184,8 @@ def predict_family_map(
             mode="gaussian",
         )
     family_argmax = logits.argmax(dim=1).squeeze(0).cpu().numpy().astype(np.float32)
-    return (family_argmax / 4.0).astype(np.float32)  # normalize [0..1]
+    denom = max(1, num_classes - 1)
+    return (family_argmax / denom).astype(np.float32)  # normalize [0..1]
 
 
 # ─── Label NIfTI 41-classes ───────────────────────────────────────────────────
@@ -315,7 +319,7 @@ def main() -> None:
 
     # Load stage-2 model
     print(f"\n[1] Chargement du modèle stage-2...")
-    model = build_stage2_model(args.swin_feature_size, device)
+    model = build_stage2_model(args.swin_feature_size, device, num_classes=args.num_classes_stage2)
     load_stage2_checkpoint(model, args.stage2_checkpoint, device)
     model.eval()
 
@@ -381,7 +385,8 @@ def main() -> None:
 
             # ── Run stage-2 → family_map normalisée ───────────────────────
             family_map = predict_family_map(
-                model, img, mask, patch_size, args.sw_overlap, device, args.amp
+                model, img, mask, patch_size, args.sw_overlap, device, args.amp,
+                num_classes=args.num_classes_stage2
             )  # float32, range 0..1
 
             # ── Charger GT 41-classes depuis NIfTI ────────────────────────
@@ -419,6 +424,8 @@ def main() -> None:
                 "family_map_dtype":    "float32",
                 "lbl_stage3_data":     lbl_stage3.tobytes(),             # uint8
                 "lbl_stage3_dtype":    "uint8",
+                "lbl41_data":          lbl41.astype(np.uint8).tobytes(), # uint8, labels fins 0-40
+                "lbl41_dtype":         "uint8",
                 "stage3_num_classes":  NUM_CLASSES_STAGE3,
                 "stage3_mapping":      "6_groups_v1",
                 "stage2_checkpoint":   ckpt_name,

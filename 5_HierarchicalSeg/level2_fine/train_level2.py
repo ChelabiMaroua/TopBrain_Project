@@ -35,6 +35,14 @@ Usage :
 
 from __future__ import annotations
 
+import os
+# Désactive torch.compile / dynamo AVANT tout import torch/monai
+os.environ.setdefault("TORCHDYNAMO_DISABLE", "1")
+os.environ.setdefault("TORCH_COMPILE_DISABLE", "1")
+
+import matplotlib
+matplotlib.use("Agg")  # backend non-interactif, pas de tkinter
+
 import argparse
 import json
 import os
@@ -151,16 +159,15 @@ def load_level2_arrays(doc: Dict, num_classes: int) -> Tuple[np.ndarray, np.ndar
 
     img        = np.frombuffer(doc["img_data"],        dtype=img_dtype       ).reshape(shape).astype(np.float32, copy=False)
     family_map = np.frombuffer(doc["family_map_data"], dtype=family_map_dtype).reshape(shape).astype(np.float32, copy=False)
-    if "lbl_stage3_data" in doc:
+    if "lbl41_data" in doc:
+        lbl41_dtype = np.dtype(doc.get("lbl41_dtype", "uint8"))
+        lbl_stage3 = np.frombuffer(
+            doc["lbl41_data"], dtype=lbl41_dtype
+        ).reshape(shape).astype(np.int64, copy=False)
+    else:
         lbl_stage3 = np.frombuffer(
             doc["lbl_stage3_data"], dtype=lbl_stage3_dtype
         ).reshape(shape).astype(np.int64, copy=False)
-    else:
-        lbl41_dtype = np.dtype(doc.get("lbl41_dtype", "uint8"))
-        lbl41 = np.frombuffer(
-            doc["lbl41_data"], dtype=lbl41_dtype
-        ).reshape(shape).astype(np.int64, copy=False)
-        lbl_stage3 = remap_lbl41_to_stage3(lbl41).astype(np.int64, copy=False)
 
     lbl_stage3 = np.clip(lbl_stage3, 0, num_classes - 1)
     # family_map est déjà normalisée [0..1] par l'ingestion (÷4)
@@ -495,6 +502,9 @@ def main() -> None:
     # Transfer learning depuis stage-2
     p.add_argument("--init-checkpoint", default="",
                    help="Checkpoint stage-2 (2→5). Couches compatibles copiées, tête ignorée.")
+    p.add_argument("--resume", default="",
+                   help="Reprendre depuis un checkpoint complet (model + optimizer + scheduler). "
+                        "Prioritaire sur --init-checkpoint si les deux sont fournis.")
 
     # Training
     p.add_argument("--epochs",      type=int,   default=300)
@@ -667,8 +677,40 @@ def main() -> None:
     history: List[Dict] = []
 
     best_score    = -1.0
+    best_val_loss = float("inf")
     best_epoch    = 0
     no_improve    = 0
+    start_epoch   = 1
+
+    # ── Reprise complète (--resume) ────────────────────────────────────────
+    if args.resume:
+        resume_path = Path(args.resume)
+        if not resume_path.exists():
+            raise FileNotFoundError(f"--resume : checkpoint introuvable : {resume_path}")
+        ckpt_resume = torch.load(resume_path, map_location=device, weights_only=False)
+        model.load_state_dict(ckpt_resume["model_state_dict"])
+        if "optimizer_state_dict" in ckpt_resume:
+            optimizer.load_state_dict(ckpt_resume["optimizer_state_dict"])
+        saved_epoch = int(ckpt_resume.get("epoch", 0))
+        start_epoch = saved_epoch + 1
+        # Avancer le scheduler jusqu'à l'époque sauvegardée
+        for _ in range(saved_epoch):
+            scheduler.step()
+        best_score  = float(ckpt_resume.get("best_dice", ckpt_resume.get("best_score", -1.0)))
+        best_epoch  = int(ckpt_resume.get("best_epoch", saved_epoch))
+        # Restaurer best_val_loss depuis l'historique si disponible
+        if history_path.exists():
+            history = json.loads(history_path.read_text(encoding="utf-8"))
+            done_epochs = {int(r["epoch"]) for r in history}
+            no_improve = saved_epoch - best_epoch if saved_epoch >= best_epoch else 0
+            # Récupérer la val_loss minimale enregistrée dans l'historique
+            val_losses_hist = [r["val_loss"] for r in history if "val_loss" in r]
+            if val_losses_hist:
+                best_val_loss = min(val_losses_hist)
+        print(
+            f"[resume] Reprise depuis epoch {saved_epoch} → démarrage epoch {start_epoch} | "
+            f"best_dice={best_score:.4f} (epoch {best_epoch}) | no_improve={no_improve}"
+        )
 
     print(
         f"[info] fold={args.fold} | epochs={args.epochs} | lr={args.lr} | "
@@ -678,7 +720,7 @@ def main() -> None:
 
     train_start = time.perf_counter()
 
-    for epoch in range(1, args.epochs + 1):
+    for epoch in range(start_epoch, args.epochs + 1):
         elapsed_h = (time.perf_counter() - train_start) / 3600.0
         if args.max_hours > 0 and elapsed_h >= args.max_hours:
             print(f"[info] Budget temps atteint : {elapsed_h:.2f}h. Arrêt.")
@@ -752,7 +794,8 @@ def main() -> None:
         )
 
         # ── Checkpoint ─────────────────────────────────────────────────────
-        if val_dice_fg > best_score:
+        if val_loss < best_val_loss:
+            best_val_loss = val_loss
             best_score, best_epoch, no_improve = val_dice_fg, epoch, 0
             torch.save(
                 {
