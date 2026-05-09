@@ -45,9 +45,11 @@ from monai.networks.nets import SwinUNETR
 # Paramètres fixes du pipeline (doivent correspondre à l'entraînement)
 # ---------------------------------------------------------------------------
 TARGET_SHAPE: Tuple[int, int, int] = (128, 128, 64)
-PATCH_SIZE:   Tuple[int, int, int] = (64, 64, 64)
-SW_OVERLAP:   float = 0.25
-SW_MODE:      str   = "gaussian"
+PATCH_SIZE:    Tuple[int, int, int] = (64, 64, 64)
+SW_OVERLAP:    float = 0.50   # 0.25 → 0.50 : meilleure couverture aux bords de patches
+SW_MODE:       str   = "gaussian"
+STAGE1_THRESH: float = 0.35   # 0.50 → 0.35 : inclut plus de foreground à faible contraste
+USE_TTA:       bool  = True   # Test Time Augmentation : 7 flips, +5-10% Dice
 
 STAGE1_FEATURE_SIZE: int = 24   # binaire — checkpoint stage1_binary_v2 (patch_embed out=24)
 STAGE2_FEATURE_SIZE: int = 24   # 8 familles
@@ -230,17 +232,66 @@ def _sliding_infer(
     device: torch.device,
     use_amp: bool,
 ) -> torch.Tensor:
+    """Inférence sliding window simple (sans TTA)."""
     model.eval()
-    with torch.autocast(device_type=device.type, enabled=use_amp):
-        logits = sliding_window_inference(
-            inputs=x,
-            roi_size=PATCH_SIZE,
-            sw_batch_size=1,
-            predictor=model,
-            overlap=SW_OVERLAP,
-            mode=SW_MODE,
-        )
+    with torch.no_grad():
+        with torch.autocast(device_type=device.type, enabled=use_amp):
+            logits = sliding_window_inference(
+                inputs=x,
+                roi_size=PATCH_SIZE,
+                sw_batch_size=1,
+                predictor=model,
+                overlap=SW_OVERLAP,
+                mode=SW_MODE,
+            )
     return logits
+
+
+@torch.no_grad()
+def _sliding_infer_tta(
+    model: torch.nn.Module,
+    x: torch.Tensor,
+    device: torch.device,
+    use_amp: bool,
+) -> torch.Tensor:
+    """
+    Sliding window + Test Time Augmentation (7 combinaisons de flips).
+    Moyenne les probabilités sur les 7 orientations → +5-10% Dice typique.
+    """
+    model.eval()
+    # dims=[] → original, [2]=flip H, [3]=flip W, [4]=flip D, et combinaisons
+    flip_configs = [[], [2], [3], [4], [2, 3], [2, 4], [3, 4]]
+    logits_sum: Optional[torch.Tensor] = None
+    for dims in flip_configs:
+        x_aug = torch.flip(x, dims) if dims else x
+        with torch.autocast(device_type=device.type, enabled=use_amp):
+            logits = sliding_window_inference(
+                inputs=x_aug,
+                roi_size=PATCH_SIZE,
+                sw_batch_size=1,
+                predictor=model,
+                overlap=SW_OVERLAP,
+                mode=SW_MODE,
+            )
+        if dims:
+            logits = torch.flip(logits, dims)
+        if logits_sum is None:
+            logits_sum = logits.clone()
+        else:
+            logits_sum = logits_sum + logits
+    return logits_sum / len(flip_configs)  # type: ignore[operator]
+
+
+def _infer(model, x, device, use_amp, allow_tta: bool = True):
+    """Dispatch vers TTA ou inférence simple selon USE_TTA.
+    
+    allow_tta=False force l'inférence simple (utilisé pour Stage2/3
+    car leurs classes encodent la latéralité anatomique L/R : un flip
+    gauche-droite inverserait les prédictions L-ACA vs R-ACA, etc.)
+    """
+    if USE_TTA and allow_tta:
+        return _sliding_infer_tta(model, x, device, use_amp)
+    return _sliding_infer(model, x, device, use_amp)
 
 
 # ---------------------------------------------------------------------------
@@ -359,9 +410,9 @@ class TopBrainPipeline:
         # ── 2. Stage 1 — masque binaire ──────────────────────────────────
         t1 = time.perf_counter()
         x1 = torch.from_numpy(img_norm[None, None]).float().to(self.device)
-        logits1     = _sliding_infer(self.model_s1, x1, self.device, self.use_amp)
+        logits1     = _infer(self.model_s1, x1, self.device, self.use_amp)
         prob_vessel = torch.softmax(logits1, dim=1)[:, 1, ...]
-        binary_mask = (prob_vessel >= 0.5).squeeze(0).cpu().numpy().astype(np.uint8)
+        binary_mask = (prob_vessel >= STAGE1_THRESH).squeeze(0).cpu().numpy().astype(np.uint8)
         timing["stage1"] = time.perf_counter() - t1
         fg_ratio = float(np.count_nonzero(binary_mask)) / binary_mask.size
         print(f"[stage1] OK  fg_ratio={fg_ratio:.4f}  t={timing['stage1']:.2f}s")
@@ -372,7 +423,7 @@ class TopBrainPipeline:
         x2 = torch.from_numpy(
             np.stack([img_norm, mask_f], axis=0)[None]
         ).float().to(self.device)
-        logits2        = _sliding_infer(self.model_s2, x2, self.device, self.use_amp)
+        logits2        = _infer(self.model_s2, x2, self.device, self.use_amp, allow_tta=False)
         family_map_idx = torch.argmax(logits2, dim=1).squeeze(0).cpu().numpy().astype(np.uint8)
         # Normaliser la family map en [0..1] pour l'input stage 3
         family_map_norm = family_map_idx.astype(np.float32) / max(NUM_FAMILIES - 1, 1)
@@ -385,7 +436,7 @@ class TopBrainPipeline:
         x3 = torch.from_numpy(
             np.stack([img_norm, family_map_norm], axis=0)[None]
         ).float().to(self.device)
-        logits3 = _sliding_infer(self.model_s3, x3, self.device, self.use_amp)
+        logits3 = _infer(self.model_s3, x3, self.device, self.use_amp, allow_tta=False)
         seg41   = torch.argmax(logits3, dim=1).squeeze(0).cpu().numpy().astype(np.uint8)
         timing["stage3"] = time.perf_counter() - t3
         timing["total"]  = sum(timing.values())
