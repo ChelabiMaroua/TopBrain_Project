@@ -1,0 +1,859 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TopBrain — Segmentation Vasculaire Cérébrale</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600;700&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg0:#080a0e;--bg1:#0c0f15;--bg2:#111620;--bg3:#161c2a;
+  --border:#1e2840;--border2:#263352;
+  --text:#c4cfe8;--text-dim:#4a5a7a;--text-xdim:#2a3550;
+  --green:#00ff88;--green-dim:#00b85f;
+  --cyan:#00d4ff;--amber:#ffb400;--red:#ff4466;--violet:#9b6dff;
+  --font-mono:'IBM Plex Mono',monospace;
+  --font-sans:'IBM Plex Sans',sans-serif;
+}
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;height:100%;background:var(--bg0);color:var(--text);font-family:var(--font-mono);overflow:hidden}
+body::before{content:'';position:fixed;inset:0;z-index:1000;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,.025) 2px,rgba(0,0,0,.025) 4px);pointer-events:none}
+
+/* HEADER */
+.header{position:fixed;top:0;left:0;right:0;z-index:100;height:48px;background:var(--bg1);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 20px;gap:0}
+.brand{display:flex;align-items:center;gap:10px;padding-right:20px;border-right:1px solid var(--border);margin-right:20px}
+.brand-name{font-size:13px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--cyan)}
+.brand-sub{font-size:9px;letter-spacing:.2em;color:var(--text-dim);text-transform:uppercase}
+.header-status{display:flex;align-items:center;gap:6px;font-size:10px;color:var(--text-dim);margin-left:auto;margin-right:16px}
+.status-dot{width:6px;height:6px;border-radius:50%;background:var(--green);animation:blink 2s infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+.clock{font-size:11px;color:var(--text-dim);letter-spacing:.08em}
+
+/* LAYOUT */
+.app{position:fixed;top:48px;left:0;right:0;bottom:0;display:grid;grid-template-columns:260px 1fr 280px}
+
+/* LEFT PANEL */
+.panel-left{background:var(--bg1);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden}
+.panel-section{border-bottom:1px solid var(--border);flex-shrink:0}
+.ps-header{display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:var(--bg2)}
+.ps-title{font-size:9px;font-weight:600;letter-spacing:.15em;text-transform:uppercase;color:var(--text-dim)}
+.ps-badge{font-size:8px;padding:1px 6px;border-radius:2px;background:rgba(0,212,255,.1);color:var(--cyan);border:1px solid rgba(0,212,255,.2)}
+.ps-body{padding:12px}
+
+/* UPLOAD */
+.drop-zone{border:1px dashed var(--border2);border-radius:4px;padding:20px 12px;text-align:center;cursor:pointer;transition:all .2s;background:var(--bg0)}
+.drop-zone:hover,.drop-zone.drag{border-color:var(--cyan);background:rgba(0,212,255,.04)}
+.drop-icon{font-size:22px;margin-bottom:8px;opacity:.4}
+.drop-text{font-size:9px;color:var(--text-dim);letter-spacing:.05em;line-height:1.6}
+.file-loaded{display:none;padding:8px 10px;background:rgba(0,255,136,.06);border:1px solid rgba(0,255,136,.15);border-radius:3px;font-size:9px;color:var(--green)}
+.file-loaded.show{display:block}
+
+/* RUN BUTTON */
+.btn-run{width:100%;height:36px;background:transparent;border:1px solid var(--cyan);border-radius:3px;color:var(--cyan);font-family:var(--font-mono);font-size:10px;font-weight:600;letter-spacing:.15em;text-transform:uppercase;cursor:pointer;transition:all .2s;position:relative;overflow:hidden}
+.btn-run::before{content:'';position:absolute;top:0;left:-100%;width:100%;height:100%;background:linear-gradient(90deg,transparent,rgba(0,212,255,.15),transparent);transition:left .4s}
+.btn-run:hover::before{left:100%}
+.btn-run:hover{background:rgba(0,212,255,.08);box-shadow:0 0 16px rgba(0,212,255,.2)}
+.btn-run:disabled{border-color:var(--border2);color:var(--text-dim);cursor:not-allowed}
+.btn-run:disabled::before{display:none}
+
+/* PROGRESS */
+.progress-block{margin-top:10px;display:none}
+.progress-block.show{display:block}
+.pb-row{display:flex;justify-content:space-between;margin-bottom:4px}
+.pb-label{font-size:9px;color:var(--text-dim);letter-spacing:.1em}
+.pb-pct{font-size:9px;color:var(--cyan)}
+.pb-track{height:2px;background:var(--border);border-radius:1px;overflow:hidden}
+.pb-fill{height:100%;width:0%;background:linear-gradient(90deg,var(--cyan),var(--green));transition:width .4s;border-radius:1px}
+.pb-steps{margin-top:6px}
+.pb-step{font-size:9px;color:var(--text-xdim);padding:2px 0;transition:color .2s}
+.pb-step.active{color:var(--cyan)}.pb-step.done{color:var(--green-dim)}
+.pb-step.done::before{content:'[OK] '}.pb-step.active::before{content:'>>> '}.pb-step::before{content:'    '}
+
+/* METRICS */
+.metric-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.metric-card{background:var(--bg2);border:1px solid var(--border);padding:7px 8px;border-radius:2px}
+.mc-label{font-size:8px;color:var(--text-dim);letter-spacing:.1em;margin-bottom:3px}
+.mc-val{font-size:15px;font-weight:600;color:var(--amber)}
+.mc-val.good{color:var(--green)}
+.mc-val.dim{color:var(--text-dim)}
+
+/* CONTROLS */
+.ctrl-grid{display:flex;flex-direction:column;gap:8px}
+.ctrl-row{display:flex;align-items:center;justify-content:space-between}
+.ctrl-lbl{font-size:9px;color:var(--text-dim);letter-spacing:.08em}
+.ctrl-val{font-size:9px;color:var(--amber);min-width:28px;text-align:right}
+input[type=range]{-webkit-appearance:none;width:80px;height:2px;background:var(--border2);border-radius:1px;outline:none;cursor:pointer}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:10px;height:10px;border-radius:50%;background:var(--cyan);cursor:pointer}
+.toggle2{width:32px;height:16px;background:var(--border2);border-radius:8px;border:none;cursor:pointer;position:relative;transition:background .2s}
+.toggle2.on{background:rgba(0,212,255,.4);border:1px solid var(--cyan)}
+.toggle2::after{content:'';position:absolute;width:10px;height:10px;border-radius:50%;background:var(--text-dim);top:3px;left:3px;transition:all .2s}
+.toggle2.on::after{background:var(--cyan);transform:translateX(16px)}
+
+/* LEGEND */
+.legend-grid{display:flex;flex-direction:column;gap:2px}
+.leg-item{display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:2px;cursor:pointer;transition:background .15s;border:1px solid transparent}
+.leg-item:hover{background:rgba(255,255,255,.03);border-color:var(--border)}
+.leg-item.off{opacity:.3}
+.leg-bar{width:3px;height:28px;border-radius:1px;flex-shrink:0}
+.leg-info{flex:1}
+.leg-name{font-size:9px;color:var(--text);letter-spacing:.04em}
+.leg-vox{font-size:8px;color:var(--text-dim);margin-top:1px}
+.leg-vox span{color:var(--amber)}
+
+/* CENTER */
+.panel-center{background:var(--bg0);display:flex;flex-direction:column;overflow:hidden;position:relative}
+.view-toolbar{height:36px;background:var(--bg1);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 12px;gap:2px;flex-shrink:0}
+.vt-btn{height:26px;padding:0 12px;font-family:var(--font-mono);font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--text-dim);background:transparent;border:1px solid transparent;border-radius:2px;cursor:pointer;transition:all .15s}
+.vt-btn:hover{color:var(--text);border-color:var(--border)}
+.vt-btn.active{color:var(--cyan);border-color:var(--border2);background:rgba(0,212,255,.07)}
+.vt-sep{width:1px;height:20px;background:var(--border);margin:0 6px}
+.view-panels{flex:1;position:relative;overflow:hidden}
+.view-pane{position:absolute;inset:0;display:none}
+.view-pane.active{display:block}
+#vp-3d{background:radial-gradient(ellipse at 35% 45%,#0a1525 0%,#050810 65%)}
+#three-mount{width:100%;height:100%}
+
+/* Slice grid */
+#vp-slices{display:none}
+#vp-slices.active{display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:1px;background:var(--border)}
+.slice-quad{background:#050810;position:relative;display:flex;align-items:center;justify-content:center;overflow:hidden}
+.sq-label{position:absolute;top:6px;left:8px;font-size:8px;letter-spacing:.12em;color:var(--text-dim);text-transform:uppercase}
+.sq-slider{position:absolute;bottom:8px;left:50%;transform:translateX(-50%);width:60%;opacity:.6}
+.sq-slider:hover{opacity:1}
+
+/* EMPTY state */
+.empty-center{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;pointer-events:none}
+.empty-glyph{font-size:40px;opacity:.08}
+.empty-text{font-size:10px;letter-spacing:.15em;color:var(--text-xdim);text-transform:uppercase}
+
+/* RIGHT PANEL */
+.panel-right{background:var(--bg1);border-left:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden}
+.breakdown-table{width:100%;border-collapse:collapse;font-size:9px}
+.breakdown-table th{color:var(--text-dim);letter-spacing:.1em;text-align:left;padding:3px 0;border-bottom:1px solid var(--border)}
+.breakdown-table td{padding:3px 0;border-bottom:1px solid rgba(30,40,64,.5);color:var(--text)}
+.breakdown-table td:last-child{color:var(--amber)}
+.log-feed{flex:1;overflow-y:auto;padding:8px 12px;font-size:9px}
+.log-entry{padding:3px 0;border-bottom:1px solid rgba(30,40,64,.4);display:flex;gap:6px;line-height:1.5}
+.log-ts{color:var(--text-xdim);flex-shrink:0;min-width:55px}
+.log-tag{flex-shrink:0;min-width:30px}
+.tag-ok{color:var(--green)}.tag-warn{color:var(--amber)}.tag-err{color:var(--red)}.tag-info{color:var(--text-dim)}
+.log-msg{color:var(--text)}
+
+/* TOAST */
+.toast{position:fixed;bottom:20px;right:20px;background:var(--bg3);border:1px solid var(--border2);padding:8px 14px;border-radius:3px;font-size:10px;color:var(--cyan);z-index:2000;opacity:0;transform:translateY(8px);transition:all .3s;pointer-events:none}
+.toast.show{opacity:1;transform:translateY(0)}
+
+/* HUDs */
+.threed-hud{position:absolute;pointer-events:none}
+.hud-tl{top:12px;left:12px}
+.hud-br{bottom:12px;right:12px}
+.hud-label{font-size:8px;letter-spacing:.15em;text-transform:uppercase;color:var(--text-dim);line-height:1.8}
+.hud-val{color:var(--cyan);font-weight:500}
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<header class="header">
+  <div class="brand">
+    <div>
+      <div class="brand-name">TopBrain</div>
+      <div class="brand-sub">Neural Seg. Platform</div>
+    </div>
+  </div>
+  <span style="font-size:10px;color:var(--text-dim);letter-spacing:.06em">Segmentation Vasculaire CTA &mdash; Vue M&#233;decin</span>
+  <div class="header-status">
+    <div class="status-dot" id="status-dot"></div>
+    <span id="status-label">Connexion...</span>
+    <span class="clock" id="clock">00:00:00</span>
+  </div>
+</header>
+
+<div class="app">
+
+  <!-- LEFT -->
+  <aside class="panel-left">
+
+    <div class="panel-section">
+      <div class="ps-header"><span class="ps-title">Fichier CTA</span></div>
+      <div class="ps-body">
+        <div class="drop-zone" id="drop-zone" onclick="document.getElementById('file-input').click()"
+             ondragover="event.preventDefault();this.classList.add('drag')"
+             ondragleave="this.classList.remove('drag')"
+             ondrop="onDrop(event)">
+          <div class="drop-icon">&#11041;</div>
+          <div class="drop-text">Glisser un fichier<br><strong style="color:var(--cyan)">.nii</strong> ou <strong style="color:var(--cyan)">.nii.gz</strong><br>ou cliquer pour parcourir</div>
+        </div>
+        <input type="file" id="file-input" accept=".nii,.nii.gz" style="display:none" onchange="onFileSelect(this)">
+        <div class="file-loaded" id="file-loaded"></div>
+        <div style="margin-top:10px">
+          <button class="btn-run" id="btn-run" onclick="runSegmentation()" disabled>
+            &#9654;&nbsp; Lancer la segmentation
+          </button>
+        </div>
+        <div class="progress-block" id="progress-block">
+          <div class="pb-row"><span class="pb-label">Pipeline Progress</span><span class="pb-pct" id="pb-pct">0%</span></div>
+          <div class="pb-track"><div class="pb-fill" id="pb-fill"></div></div>
+          <div class="pb-steps" id="pb-steps"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel-section">
+      <div class="ps-header"><span class="ps-title">M&#233;triques</span></div>
+      <div class="ps-body">
+        <div class="metric-grid">
+          <div class="metric-card"><div class="mc-label">Dice FG</div><div class="mc-val dim" id="mc-dice">&#8212;</div></div>
+          <div class="metric-card"><div class="mc-label">IoU FG</div><div class="mc-val dim" id="mc-iou">&#8212;</div></div>
+          <div class="metric-card"><div class="mc-label">Classes</div><div class="mc-val dim" id="mc-cls">&#8212;</div></div>
+          <div class="metric-card"><div class="mc-label">Temps</div><div class="mc-val dim" id="mc-time">&#8212;</div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel-section">
+      <div class="ps-header"><span class="ps-title">Render Controls</span></div>
+      <div class="ps-body">
+        <div class="ctrl-grid">
+          <div class="ctrl-row">
+            <span class="ctrl-lbl">Opacit&#233; segments</span>
+            <div style="display:flex;align-items:center;gap:6px">
+              <input type="range" id="sl-opacity" min="10" max="100" value="70" oninput="updateOpacity(this.value)">
+              <span class="ctrl-val" id="val-opacity">70%</span>
+            </div>
+          </div>
+          <div class="ctrl-row"><span class="ctrl-lbl">Segments</span><button class="toggle2 on" id="tog-seg" onclick="togSeg(this)"></button></div>
+          <div class="ctrl-row"><span class="ctrl-lbl">Auto-rotation</span><button class="toggle2 on" id="tog-rot" onclick="togRot(this)"></button></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel-section" style="flex:1;overflow-y:auto">
+      <div class="ps-header">
+        <span class="ps-title">Structure Map</span>
+        <span class="ps-badge" id="legend-count">0 cls</span>
+      </div>
+      <div class="ps-body" style="padding:8px 10px">
+        <div class="legend-grid" id="legend-grid"></div>
+      </div>
+    </div>
+
+  </aside>
+
+  <!-- CENTER -->
+  <main class="panel-center">
+    <div class="view-toolbar">
+      <button class="vt-btn active" onclick="switchView('3d',this)">3D Volume</button>
+      <button class="vt-btn" onclick="switchView('slices',this)">Coupes axiales</button>
+      <div class="vt-sep"></div>
+      <button class="vt-btn" onclick="resetCamera()">&#8635; Reset</button>
+      <button class="vt-btn" id="btn-export" onclick="exportReport()" disabled>&#11015; Rapport</button>
+    </div>
+    <div class="view-panels">
+      <div class="view-pane active" id="vp-3d">
+        <div id="three-mount"></div>
+        <div class="empty-center" id="empty-3d">
+          <div class="empty-glyph">&#11041;</div>
+          <div class="empty-text">Charger un fichier NIfTI</div>
+          <div style="font-size:9px;color:var(--text-xdim)">pour lancer la segmentation</div>
+        </div>
+        <div class="threed-hud hud-tl" id="hud-tl">
+          <div class="hud-label">Patient ID<br><span class="hud-val" id="hud-pid">&#8212;</span></div>
+        </div>
+        <div class="threed-hud hud-br">
+          <div class="hud-label" style="text-align:right">Drag pour pivoter &bull; Molette pour zoom</div>
+        </div>
+      </div>
+      <div class="view-pane" id="vp-slices">
+        <div class="slice-quad" id="sq-ax"><span class="sq-label">Axiale</span><canvas id="cv-ax"></canvas><input type="range" class="sq-slider" id="sl-ax" min="0" max="63" value="32" oninput="drawSlice('ax',+this.value)"></div>
+        <div class="slice-quad" id="sq-co"><span class="sq-label">Coronale</span><canvas id="cv-co"></canvas><input type="range" class="sq-slider" id="sl-co" min="0" max="127" value="64" oninput="drawSlice('co',+this.value)"></div>
+        <div class="slice-quad" id="sq-sa"><span class="sq-label">Sagittale</span><canvas id="cv-sa"></canvas><input type="range" class="sq-slider" id="sl-sa" min="0" max="127" value="64" oninput="drawSlice('sa',+this.value)"></div>
+        <div class="slice-quad" id="sq-fam"><span class="sq-label">Familles</span><canvas id="cv-fam"></canvas><input type="range" class="sq-slider" id="sl-fam" min="0" max="63" value="32" oninput="drawSlice('fam',+this.value)"></div>
+      </div>
+    </div>
+  </main>
+
+  <!-- RIGHT -->
+  <aside class="panel-right">
+    <div class="panel-section">
+      <div class="ps-header"><span class="ps-title">Classes d&#233;tect&#233;es</span><span class="ps-badge" id="cls-badge">&#8212;</span></div>
+      <div class="ps-body" style="padding:8px 10px;max-height:220px;overflow-y:auto">
+        <table class="breakdown-table">
+          <thead><tr><th>Structure</th><th style="text-align:right">Voxels</th></tr></thead>
+          <tbody id="breakdown-body">
+            <tr><td colspan="2" style="color:var(--text-xdim);padding:8px 0;font-size:9px">En attente de segmentation...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div class="panel-section">
+      <div class="ps-header"><span class="ps-title">Clinique &#8212; Classes majeures</span></div>
+      <div class="ps-body" style="padding:8px 10px;max-height:180px;overflow-y:auto">
+        <div id="clinical-grid" style="display:flex;flex-direction:column;gap:3px;font-size:9px;color:var(--text-dim)">En attente...</div>
+      </div>
+    </div>
+    <div class="panel-section" style="flex:1;overflow:hidden;display:flex;flex-direction:column">
+      <div class="ps-header"><span class="ps-title">System Log</span><span class="ps-badge" id="log-count">0</span></div>
+      <div class="log-feed" id="log-feed"></div>
+    </div>
+  </aside>
+
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+// ============================================================
+// CONFIG
+// ============================================================
+const API = 'http://localhost:5000';
+
+// ============================================================
+// STATE
+// ============================================================
+const S = {
+  file: null,
+  jobId: null,
+  result: null,
+  opacity: 0.7,
+  showSeg: true,
+  autoRot: true,
+  seg41: null,
+  families: null,
+  shape: [128, 128, 64],
+};
+
+const CLASS_COLORS = {
+  1:'#9b59b6',2:'#3498db',3:'#2980b9',4:'#00ff88',5:'#e74c3c',
+  6:'#1abc9c',7:'#c0392b',8:'#f39c12',9:'#e67e22',10:'#d35400',
+  11:'#8e44ad',12:'#7d3c98',13:'#ff4466',14:'#ff6b8a',15:'#ff85a1',
+  16:'#ff9eb7',17:'#00d4ff',18:'#00a8cc',19:'#007ea6',20:'#005f80',
+  21:'#27ae60',22:'#1e8449',23:'#f1c40f',24:'#f0b90b',25:'#e6a817',
+  26:'#dc9f1f',27:'#2ecc71',28:'#28b463',29:'#239b56',30:'#1d8348',
+  31:'#e74c3c',32:'#cb4335',33:'#b03a2e',34:'#9b2335',
+  35:'#9b6dff',36:'#7d5be6',37:'#6049cd',38:'#4337b4',39:'#2625a0',
+  40:'#00d4ff',
+};
+const CLASS_NAMES = {
+  1:'BA',2:'R-P1P2',3:'L-P1P2',4:'R-ICA',5:'R-M1',6:'L-ICA',7:'L-M1',
+  8:'R-Pcom',9:'L-Pcom',10:'Acom',11:'R-A1A2',12:'L-A1A2',13:'R-A3',
+  14:'L-A3',15:'3rd-A2',16:'3rd-A3',17:'R-M2',18:'R-M3',19:'L-M2',20:'L-M3',
+  21:'R-P3P4',22:'L-P3P4',23:'R-VA',24:'L-VA',25:'R-SCA',26:'L-SCA',
+  27:'R-AICA',28:'L-AICA',29:'R-PICA',30:'L-PICA',31:'R-AChA',32:'L-AChA',
+  33:'R-OA',34:'L-OA',35:'VoG',36:'StS',37:'ICVs',38:'R-BVR',39:'L-BVR',40:'SSS',
+};
+
+// ============================================================
+// CLOCK + HEALTH
+// ============================================================
+function updateClock() {
+  const n = new Date();
+  document.getElementById('clock').textContent =
+    [n.getHours(), n.getMinutes(), n.getSeconds()]
+      .map(v => String(v).padStart(2, '0')).join(':');
+}
+setInterval(updateClock, 1000); updateClock();
+
+async function checkHealth() {
+  try {
+    const r = await fetch(API + '/health');
+    const d = await r.json();
+    const dot = document.getElementById('status-dot');
+    const lbl = document.getElementById('status-label');
+    if (d.status === 'ok') {
+      dot.style.background = 'var(--green)';
+      lbl.textContent = d.pipeline ? 'Pipeline pret' : 'Serveur OK (pipeline absent)';
+    }
+  } catch (e) {
+    document.getElementById('status-dot').style.background = 'var(--red)';
+    document.getElementById('status-label').textContent = 'Serveur inaccessible';
+    addLog('Connexion backend echouee — verifier app.py', 'ERR');
+  }
+}
+checkHealth(); setInterval(checkHealth, 30000);
+
+// ============================================================
+// LOG
+// ============================================================
+let logCount = 0;
+function addLog(msg, tag = 'INFO') {
+  logCount++;
+  const feed = document.getElementById('log-feed');
+  const ts = new Date().toLocaleTimeString('fr-FR', { hour12: false });
+  const tagClass = { OK: 'tag-ok', WARN: 'tag-warn', ERR: 'tag-err', INFO: 'tag-info' }[tag] || 'tag-info';
+  const el = document.createElement('div');
+  el.className = 'log-entry';
+  el.innerHTML = '<span class="log-ts">' + ts + '</span>'
+    + '<span class="log-tag ' + tagClass + '">' + tag + '</span>'
+    + '<span class="log-msg">' + msg + '</span>';
+  feed.insertBefore(el, feed.firstChild);
+  document.getElementById('log-count').textContent = logCount;
+}
+
+// ============================================================
+// FILE HANDLING
+// ============================================================
+function onDrop(e) {
+  e.preventDefault();
+  document.getElementById('drop-zone').classList.remove('drag');
+  const f = e.dataTransfer.files[0];
+  if (f) setFile(f);
+}
+function onFileSelect(inp) { if (inp.files[0]) setFile(inp.files[0]); }
+function setFile(f) {
+  if (!f.name.match(/\.nii(\.gz)?$/i)) { showToast('Format invalide — .nii ou .nii.gz requis'); return; }
+  S.file = f;
+  const loaded = document.getElementById('file-loaded');
+  loaded.textContent = '[OK] ' + f.name + ' (' + formatBytes(f.size) + ')';
+  loaded.classList.add('show');
+  document.getElementById('btn-run').disabled = false;
+  document.getElementById('hud-pid').textContent = f.name.replace(/\.nii(\.gz)?$/, '');
+  addLog('Fichier charge: ' + f.name, 'OK');
+}
+function formatBytes(b) {
+  return b > 1048576 ? (b / 1048576).toFixed(1) + ' MB' : (b / 1024).toFixed(0) + ' KB';
+}
+
+// ============================================================
+// SEGMENTATION — appels API reels
+// ============================================================
+const STEPS = [
+  'Pretraitement CTA',
+  'Stage 1 : Masque binaire',
+  'Stage 2 : 8 familles',
+  'Stage 3 : 41 classes',
+  'Post-traitement',
+];
+const STEP_PCT = [10, 30, 55, 85, 100];
+
+function showProgress(stepIdx) {
+  const block = document.getElementById('progress-block');
+  block.classList.add('show');
+  document.getElementById('pb-fill').style.width = STEP_PCT[stepIdx] + '%';
+  document.getElementById('pb-pct').textContent = STEP_PCT[stepIdx] + '%';
+  const stepsEl = document.getElementById('pb-steps');
+  stepsEl.innerHTML = '';
+  STEPS.forEach((s, i) => {
+    const d = document.createElement('div');
+    d.className = 'pb-step' + (i < stepIdx ? ' done' : i === stepIdx ? ' active' : '');
+    d.textContent = s;
+    stepsEl.appendChild(d);
+  });
+}
+
+async function runSegmentation() {
+  if (!S.file) return;
+  const btn = document.getElementById('btn-run');
+  btn.disabled = true;
+  btn.textContent = 'Segmentation en cours...';
+  addLog('Envoi du fichier au backend...', 'INFO');
+  showProgress(0);
+
+  // Upload
+  const fd = new FormData();
+  fd.append('file', S.file);
+  let jobId;
+  try {
+    const r = await fetch(API + '/segment', { method: 'POST', body: fd });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const d = await r.json();
+    jobId = d.job_id;
+    S.jobId = jobId;
+    addLog('Job cree: ' + jobId, 'OK');
+  } catch (e) {
+    addLog('Erreur upload: ' + e.message, 'ERR');
+    btn.disabled = false;
+    btn.textContent = '&#9654;  Lancer la segmentation';
+    return;
+  }
+
+  // Polling avec progression animated
+  showProgress(1);
+  let stepFake = 1;
+  const fakeInterval = setInterval(() => {
+    if (stepFake < 4) showProgress(++stepFake);
+  }, 600);
+
+  let done = false;
+  for (let i = 0; i < 120 && !done; i++) {
+    await sleep(1000);
+    try {
+      const r = await fetch(API + '/status/' + jobId);
+      const d = await r.json();
+      if (d.status === 'done') {
+        done = true;
+        clearInterval(fakeInterval);
+        showProgress(4);
+        addLog('Pipeline termine en ' + d.elapsed_s + 's', 'OK');
+      } else if (d.status === 'error') {
+        clearInterval(fakeInterval);
+        addLog('Erreur pipeline: ' + (d.error || 'inconnue'), 'ERR');
+        btn.disabled = false;
+        btn.textContent = '&#9654;  Lancer la segmentation';
+        return;
+      }
+    } catch (e) { /* retry silently */ }
+  }
+
+  if (!done) {
+    clearInterval(fakeInterval);
+    addLog('Timeout — serveur non disponible', 'WARN');
+    btn.disabled = false;
+    btn.textContent = '&#9654;  Lancer la segmentation';
+    return;
+  }
+
+  // Recup resultats
+  try {
+    const r = await fetch(API + '/result/' + jobId);
+    const d = await r.json();
+    S.result = d;
+    displayResults(d);
+    addLog('Affichage des resultats: ' + (d.metrics.classes_found || 0) + ' classes detectees', 'OK');
+    document.getElementById('btn-export').disabled = false;
+  } catch (e) {
+    addLog('Erreur recup resultats: ' + e.message, 'ERR');
+  }
+
+  btn.disabled = false;
+  btn.textContent = '&#9654;  Relancer';
+}
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+// ============================================================
+// AFFICHAGE RESULTATS
+// ============================================================
+function displayResults(d) {
+  const dice = d.metrics.dice_fg || 0;
+  const iou = d.metrics.iou_fg || 0;
+  const el = id => document.getElementById(id);
+
+  // Metriques
+  el('mc-dice').textContent = dice.toFixed(3);
+  el('mc-dice').className = 'mc-val' + (dice >= 0.5 ? ' good' : '');
+  el('mc-iou').textContent = iou.toFixed(3);
+  el('mc-iou').className = 'mc-val' + (iou >= 0.4 ? ' good' : '');
+  el('mc-cls').textContent = (d.metrics.classes_found || 0) + '/40';
+  el('mc-time').textContent = (d.elapsed_s || '?') + 's';
+
+  // Tableau classes
+  const cv = d.class_volumes || {};
+  const rows = Object.entries(cv).sort((a, b) => b[1] - a[1]);
+  const tbody = el('breakdown-body');
+  tbody.innerHTML = '';
+  if (rows.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="2" style="color:var(--text-xdim);font-size:9px;padding:8px 0">Aucune classe detectee</td></tr>';
+  } else {
+    rows.forEach(([name, vox]) => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = '<td>' + name + '</td><td style="text-align:right">' + vox.toLocaleString() + '</td>';
+      tbody.appendChild(tr);
+    });
+  }
+  el('cls-badge').textContent = rows.length + ' cls';
+
+  // Legende
+  const grid = el('legend-grid');
+  grid.innerHTML = '';
+  rows.slice(0, 20).forEach(([name]) => {
+    const clsId = Object.entries(CLASS_NAMES).find(([, n]) => n === name)?.[0];
+    const color = clsId ? (CLASS_COLORS[clsId] || '#555') : '#555';
+    const item = document.createElement('div');
+    item.className = 'leg-item';
+    item.innerHTML = '<div class="leg-bar" style="background:' + color + '"></div>'
+      + '<div class="leg-info"><div class="leg-name">' + name + '</div>'
+      + '<div class="leg-vox"><span>' + (cv[name] || 0).toLocaleString() + '</span> vox</div></div>';
+    item.onclick = () => item.classList.toggle('off');
+    grid.appendChild(item);
+  });
+  el('legend-count').textContent = rows.length + ' CLS';
+
+  // Clinical
+  const cg = el('clinical-grid');
+  cg.innerHTML = '';
+  const clinical = d.clinical || {};
+  const clinicalEntries = Object.entries(clinical);
+  if (clinicalEntries.length === 0) {
+    cg.textContent = 'Aucune donnee clinique';
+  } else {
+    clinicalEntries.forEach(([name, info]) => {
+      const div = document.createElement('div');
+      div.style.cssText = 'display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid rgba(30,40,64,.5)';
+      div.innerHTML = '<span>' + name + '</span>'
+        + '<span style="color:' + (info.present ? 'var(--green)' : 'var(--text-xdim)') + '">'
+        + (info.present ? info.voxels.toLocaleString() + ' vox' : 'absent') + '</span>';
+      cg.appendChild(div);
+    });
+  }
+
+  // Rendu 3D
+  if (typeof THREE === 'undefined') {
+    addLog('Three.js non disponible — rendu 3D desactive', 'WARN');
+    document.getElementById('empty-3d').innerHTML = '<div style="color:var(--amber);font-size:10px;text-align:center;padding:20px">Rendu 3D indisponible en mode fichier local.<br>Acceder via <b>http://localhost:5000</b></div>';
+  } else {
+    document.getElementById('empty-3d').style.display = 'none';
+    init3D(rows);
+  }
+  showToast('Segmentation terminee — ' + rows.length + ' classes detectees');
+}
+
+// ============================================================
+// 3D RENDER (Three.js)
+// ============================================================
+let renderer3, camera3, scene3, animId, rotY = 0, rotX = 0;
+let isDrag = false, lastX = 0, lastY = 0;
+
+function init3D(classRows) {
+  const mount = document.getElementById('three-mount');
+  if (renderer3) { renderer3.dispose(); mount.innerHTML = ''; }
+
+  renderer3 = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+  renderer3.setPixelRatio(window.devicePixelRatio);
+  renderer3.setSize(mount.clientWidth, mount.clientHeight);
+  renderer3.setClearColor(0x000000, 0);
+  mount.appendChild(renderer3.domElement);
+
+  camera3 = new THREE.PerspectiveCamera(45, mount.clientWidth / mount.clientHeight, 0.1, 2000);
+  camera3.position.set(110, 80, 110);
+  scene3 = new THREE.Group();
+  const root = new THREE.Scene();
+  root.add(scene3);
+
+  // Cerveau semi-transparent
+  const brainGeo = new THREE.SphereGeometry(48, 32, 32);
+  const brainMat = new THREE.MeshPhongMaterial({ color: 0x0a1525, transparent: true, opacity: 0.08 });
+  scene3.add(new THREE.Mesh(brainGeo, brainMat));
+
+  // Wireframe
+  const wfGeo = new THREE.SphereGeometry(48, 16, 12);
+  const wfMat = new THREE.MeshBasicMaterial({ color: 0x1e2840, wireframe: true, transparent: true, opacity: 0.15 });
+  scene3.add(new THREE.Mesh(wfGeo, wfMat));
+
+  // Lumieres
+  root.add(new THREE.AmbientLight(0x334466, 0.8));
+  const dir = new THREE.DirectionalLight(0x00d4ff, 0.6);
+  dir.position.set(100, 100, 50);
+  root.add(dir);
+
+  // Vaisseaux — sphere par classe detectee
+  classRows.slice(0, 30).forEach(([name, vox], i) => {
+    const clsId = parseInt(Object.entries(CLASS_NAMES).find(([, n]) => n === name)?.[0] || '0');
+    if (!clsId) return;
+    const hex = parseInt((CLASS_COLORS[clsId] || '#556677').replace('#', ''), 16);
+    const r = Math.max(3, Math.min(12, vox / 120));
+    const angle = (i / 30) * Math.PI * 2;
+    const radius = 18 + Math.random() * 28;
+    const x = Math.cos(angle) * radius;
+    const z = Math.sin(angle) * radius;
+    const y = (Math.random() - 0.5) * 40;
+
+    // Sphere
+    const geo = new THREE.SphereGeometry(r, 12, 10);
+    const mat = new THREE.MeshPhongMaterial({
+      color: hex, transparent: true, opacity: S.opacity,
+      emissive: hex, emissiveIntensity: 0.15,
+    });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.set(x, y, z);
+    scene3.add(mesh);
+
+    // Tube depuis le centre
+    const pts = [new THREE.Vector3(0, 0, 0), new THREE.Vector3(x, y, z)];
+    const curve = new THREE.CatmullRomCurve3(pts);
+    const tubeGeo = new THREE.TubeGeometry(curve, 4, r * 0.3, 6, false);
+    const tubeMat = new THREE.MeshPhongMaterial({ color: hex, transparent: true, opacity: S.opacity * 0.5 });
+    scene3.add(new THREE.Mesh(tubeGeo, tubeMat));
+  });
+
+  function animate() {
+    animId = requestAnimationFrame(animate);
+    if (S.autoRot) scene3.rotation.y += 0.003;
+    renderer3.render(root, camera3);
+  }
+  animate();
+
+  // Interactions souris
+  const domEl = renderer3.domElement;
+  domEl.addEventListener('mousedown', e => { isDrag = true; lastX = e.clientX; lastY = e.clientY; });
+  window.addEventListener('mouseup', () => isDrag = false);
+  window.addEventListener('mousemove', e => {
+    if (!isDrag) return;
+    rotY += (e.clientX - lastX) * 0.006;
+    rotX = Math.max(-1.2, Math.min(1.2, rotX + (e.clientY - lastY) * 0.006));
+    scene3.rotation.y = rotY;
+    scene3.rotation.x = rotX;
+    lastX = e.clientX; lastY = e.clientY;
+  });
+  domEl.addEventListener('wheel', e => {
+    camera3.position.multiplyScalar(e.deltaY > 0 ? 1.07 : 0.94);
+  });
+}
+
+function resetCamera() {
+  if (camera3) {
+    camera3.position.set(110, 80, 110);
+    rotY = 0; rotX = 0;
+    if (scene3) scene3.rotation.set(0, 0, 0);
+  }
+}
+
+// ============================================================
+// VUES COUPES — canvas 2D (donnees JSON / NIfTI si disponibles)
+// ============================================================
+const FAMILY_COLORS = ['#000', '#1D9E75', '#4A90E2', '#E25454', '#F5A623', '#9B59B6', '#E67E22', '#1ABC9C'];
+
+function drawSlice(plane, idx) {
+  const canvId = { ax: 'cv-ax', co: 'cv-co', sa: 'cv-sa', fam: 'cv-fam' }[plane];
+  const canvas = document.getElementById(canvId);
+  if (!canvas) return;
+  const parent = canvas.parentElement;
+  canvas.width = parent.clientWidth || 256;
+  canvas.height = parent.clientHeight || 256;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#050810';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  if (!S.seg41 && !S.families) {
+    // Pas de donnees NIfTI — afficher placeholder
+    ctx.fillStyle = 'rgba(42,53,80,.6)';
+    ctx.font = '10px IBM Plex Mono, monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('NIfTI non decode', canvas.width / 2, canvas.height / 2 - 8);
+    ctx.fillText('(extension /slice en developpement)', canvas.width / 2, canvas.height / 2 + 8);
+    return;
+  }
+
+  const [H, W, D] = S.shape;
+  let W_slice, H_slice, getData;
+  if (plane === 'ax' || plane === 'fam') {
+    W_slice = W; H_slice = H;
+    getData = (x, y) => {
+      const v = plane === 'fam' ? S.families : S.seg41;
+      return v ? v[y * W + x + idx * H * W] : 0;
+    };
+  } else if (plane === 'co') {
+    W_slice = W; H_slice = D;
+    getData = (x, z) => S.seg41 ? S.seg41[idx * W + x + z * H * W] : 0;
+  } else {
+    W_slice = H; H_slice = D;
+    getData = (y, z) => S.seg41 ? S.seg41[y * W + idx + z * H * W] : 0;
+  }
+
+  const scaleX = canvas.width / W_slice;
+  const scaleY = canvas.height / H_slice;
+  for (let y = 0; y < H_slice; y++) {
+    for (let x = 0; x < W_slice; x++) {
+      const cls = getData(x, y) || 0;
+      if (cls === 0) continue;
+      const color = plane === 'fam' ? (FAMILY_COLORS[cls] || '#333') : (CLASS_COLORS[cls] || '#333');
+      ctx.fillStyle = color;
+      ctx.globalAlpha = S.opacity;
+      ctx.fillRect(Math.floor(x * scaleX), Math.floor(y * scaleY), Math.ceil(scaleX), Math.ceil(scaleY));
+    }
+  }
+  ctx.globalAlpha = 1;
+
+  // Crosshair
+  ctx.strokeStyle = 'rgba(0,212,255,.3)';
+  ctx.lineWidth = 0.5;
+  ctx.beginPath(); ctx.moveTo(canvas.width / 2, 0); ctx.lineTo(canvas.width / 2, canvas.height); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(0, canvas.height / 2); ctx.lineTo(canvas.width, canvas.height / 2); ctx.stroke();
+}
+
+// ============================================================
+// UI TOGGLES
+// ============================================================
+function togSeg(btn) { btn.classList.toggle('on'); S.showSeg = btn.classList.contains('on'); }
+function togRot(btn) { btn.classList.toggle('on'); S.autoRot = btn.classList.contains('on'); }
+function updateOpacity(v) { S.opacity = v / 100; document.getElementById('val-opacity').textContent = v + '%'; }
+
+function switchView(name, btn) {
+  document.querySelectorAll('.vt-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.view-pane').forEach(p => p.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('vp-' + name).classList.add('active');
+  if (name === 'slices' && S.result) {
+    ['ax', 'co', 'sa', 'fam'].forEach(p => {
+      const sl = document.getElementById('sl-' + p);
+      drawSlice(p, sl ? +sl.value : 32);
+    });
+  }
+}
+
+// ============================================================
+// EXPORT RAPPORT
+// ============================================================
+function exportReport() {
+  if (!S.result) return;
+  const d = S.result;
+  const now = new Date().toLocaleString('fr-FR');
+  const lines = [
+    '====================================',
+    '  TOPBRAIN -- Rapport de Segmentation',
+    '====================================',
+    'Date     : ' + now,
+    'Fichier  : ' + (S.file ? S.file.name : '--'),
+    'Job ID   : ' + (S.jobId || '--'),
+    '',
+    '--- Metriques globales ---',
+    'Dice FG      : ' + (d.metrics.dice_fg || 0).toFixed(4),
+    'IoU FG       : ' + (d.metrics.iou_fg || 0).toFixed(4),
+    'Classes FG   : ' + (d.metrics.classes_found || 0) + ' / 40',
+    'Temps total  : ' + (d.elapsed_s || '--') + 's',
+    '',
+    '--- Timing pipeline ---',
+    ...Object.entries(d.timing || {}).map(([k, v]) => '  ' + k.padEnd(12) + ': ' + v + 's'),
+    '',
+    '--- Classes detectees ---',
+    ...Object.entries(d.class_volumes || {})
+      .sort((a, b) => b[1] - a[1])
+      .map(([n, v]) => '  ' + n.padEnd(16) + ': ' + v.toLocaleString() + ' voxels'),
+    '',
+    '--- Classes cliniques majeures ---',
+    ...Object.entries(d.clinical || {})
+      .map(([n, i]) => '  ' + n.padEnd(16) + ': ' + (i.present ? i.voxels.toLocaleString() + ' vox' : 'ABSENT')),
+    '',
+    'Modele   : SwinUNETR hierarchique 3-stages',
+    'Stage 1  : Binaire (1->2)    Epoch 221',
+    'Stage 2  : 8 familles (2->8) Epoch 63',
+    'Stage 3  : 41 classes (2->41) Epoch 289',
+    '====================================',
+  ];
+  const blob = new Blob([lines.join('\n')], { type: 'text/plain;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'topbrain_rapport_' + (S.jobId || 'export') + '.txt';
+  a.click();
+  addLog('Rapport exporte', 'OK');
+}
+
+// ============================================================
+// TOAST
+// ============================================================
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 3200);
+}
+
+// ============================================================
+// RESIZE
+// ============================================================
+window.addEventListener('resize', () => {
+  if (!renderer3) return;
+  const m = document.getElementById('three-mount');
+  camera3.aspect = m.clientWidth / m.clientHeight;
+  camera3.updateProjectionMatrix();
+  renderer3.setSize(m.clientWidth, m.clientHeight);
+});
+
+// ============================================================
+// INIT
+// ============================================================
+addLog('Interface TopBrain initialisee', 'OK');
+addLog('En attente de fichier NIfTI...', 'INFO');
+</script>
+</body>
+</html>

@@ -1,0 +1,2 @@
+$env:PYTHONIOENCODING='utf-8'
+.\env_gpu\Scripts\python.exe backend/app.py --amp

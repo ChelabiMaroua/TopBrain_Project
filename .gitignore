@@ -23,6 +23,18 @@ results/terminal_result.txt
 results/stage1_binary_masks/*.nii.gz
 results/stage1_binary_masks_test/*.nii.gz
 
+# NIfTI inference outputs (large binary files)
+results/inference_*/
+results/flask_outputs/
+results/flask_uploads/
+results/*.nii.gz
+
+# Helper/debug scripts
+_check_ckpt_keys.py
+_check_results.py
+_extract_test_patient.py
+_test_flask.py
+
 # Large nnUNet artifacts (local runs)
 nnUNet_raw/
 nnUNet_preprocessed/
