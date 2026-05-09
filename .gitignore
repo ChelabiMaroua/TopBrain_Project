@@ -10,8 +10,25 @@ env_gpu/
 .env
 
 # Checkpoints & model weights
-checkpoints/
-*.pth
+# Root epoch checkpoints (snapshots d'entraînement, non nécessaires)
+/checkpoints/
+# Anciens modèles UNet3D indépendants
+/models/
+# UNet2D (non utilisé pour l'interface)
+4_Unet2D/checkpoints/
+# Checkpoints Stage1 non utilisés
+4_Unet3D/checkpoints/stage1_binary_v1/
+4_Unet3D/checkpoints/results_stage2_4c_TITAN/
+4_Unet3D/checkpoints/results_stage2_4c_10GB/
+4_Unet3D/checkpoints/unet3d_best_directfiles_fold_1.pth
+# Checkpoints HierarchicalSeg non utilisés (v1, level1)
+5_HierarchicalSeg/checkpoints/stage2_level1_v1/
+5_HierarchicalSeg/checkpoints/stage2_level1_v2/
+5_HierarchicalSeg/checkpoints/stage3_level2_v1/
+# Les 3 checkpoints pipeline SONT inclus via Git LFS :
+#   4_Unet3D/checkpoints/stage1_binary_v2/swinunetr_best_fold_1.pth
+#   5_HierarchicalSeg/checkpoints/stage3_level2_v2/swinunetr_level2_best_fold_1.pth
+#   5_HierarchicalSeg/checkpoints/stage3_fine_v1/swinunetr_level2_best_fold_1.pth
 
 # Logs
 logs/
