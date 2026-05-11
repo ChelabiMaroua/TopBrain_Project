@@ -44,7 +44,7 @@ from monai.networks.nets import SwinUNETR
 # ---------------------------------------------------------------------------
 # Paramètres fixes du pipeline (doivent correspondre à l'entraînement)
 # ---------------------------------------------------------------------------
-TARGET_SHAPE: Tuple[int, int, int] = (128, 128, 64)
+TARGET_SHAPE: Tuple[int, int, int] = (128, 128, 96)
 PATCH_SIZE:    Tuple[int, int, int] = (64, 64, 64)
 SW_OVERLAP:    float = 0.50   # 0.25 → 0.50 : meilleure couverture aux bords de patches
 SW_MODE:       str   = "gaussian"
@@ -109,7 +109,7 @@ def resize_trilinear_3d(vol: np.ndarray, target: Tuple[int, int, int]) -> np.nda
 # (H=0.47, W=0.42, D=0.33) avec margin de ±80, ±80, ±50 voxels
 _COW_CENTER_FRAC: Tuple[float, float, float] = (0.47, 0.42, 0.33)
 # Taille du crop en voxels (espace original, avant resize)
-_CROP_HALF: Tuple[int, int, int] = (80, 80, 50)  # => 160x160x100 voxels
+_CROP_HALF: Tuple[int, int, int] = (80, 80, 75)  # => 160x160x150 voxels → resizé en 128x128x96
 # Facteur de downscale au-delà duquel on active le crop (ex: 2x dans chaque dim)
 _CROP_ACTIVATION_RATIO: float = 1.8
 
