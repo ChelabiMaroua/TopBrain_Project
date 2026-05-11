@@ -129,14 +129,14 @@ def insert_one_patient(
         img = normalize_volume(img, window_min=None, window_max=None).astype(np.float32)
         img = np.clip(img, 0.0, 1.0)
 
-    lbl = lbl.astype(np.int64, copy=False)
+    lbl = lbl.astype(np.uint8, copy=False)
 
     label_unique = np.unique(lbl)
     is_binary = set(label_unique.tolist()).issubset({0, 1})
     qc["label_is_binary"] = bool(is_binary)
     if not is_binary and not keep_multiclass_labels:
         qc["label_binarized"] = True
-        lbl = (lbl > 0).astype(np.int64)
+        lbl = (lbl > 0).astype(np.uint8)
 
     payload = serialize_binary(img, lbl)
 

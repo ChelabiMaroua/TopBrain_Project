@@ -1,0 +1,864 @@
+{
+  "src_collection": "BinaryPatients3D_96",
+  "dst_collection": "HierarchicalPatients3D_Level1_96",
+  "target_size": "128x128x96",
+  "counts": {
+    "processed": 25,
+    "inserted": 25,
+    "skipped_existing": 0,
+    "skipped_no_mask": 0,
+    "errors": 0
+  },
+  "elapsed_sec": 5.03,
+  "patients": [
+    {
+      "patient_id": "001",
+      "shape": [
+        128,
+        128,
+        96
+      ],
+      "mask_n0_fg_voxels": 6873,
+      "label_fg_voxels": 5573,
+      "mask_recall_vs_gt": 0.720617,
+      "native_mask_shape": [
+        128,
+        128,
+        96
+      ],
+      "mask_source": "stage1_manifest",
+      "label_unique": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ],
+      "label_source": "lbl_path",
+      "label_path": "C:\\Study\\Maroua\\TopBrain_Data_Release_Batches1n2_081425\\labelsTr_topbrain_ct\\topcow_ct_001.nii.gz",
+      "native_label_shape": [
+        284,
+        327,
+        243
+      ]
+    },
+    {
+      "patient_id": "002",
+      "shape": [
+        128,
+        128,
+        96
+      ],
+      "mask_n0_fg_voxels": 10728,
+      "label_fg_voxels": 7582,
+      "mask_recall_vs_gt": 0.766816,
+      "native_mask_shape": [
+        128,
+        128,
+        96
+      ],
+      "mask_source": "stage1_manifest",
+      "label_unique": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ],
+      "label_source": "lbl_path",
+      "label_path": "C:\\Study\\Maroua\\TopBrain_Data_Release_Batches1n2_081425\\labelsTr_topbrain_ct\\topcow_ct_002.nii.gz",
+      "native_label_shape": [
+        289,
+        347,
+        203
+      ]
+    },
+    {
+      "patient_id": "003",
+      "shape": [
+        128,
+        128,
+        96
+      ],
+      "mask_n0_fg_voxels": 5797,
+      "label_fg_voxels": 5346,
+      "mask_recall_vs_gt": 0.650019,
+      "native_mask_shape": [
+        128,
+        128,
+        96
+      ],
+      "mask_source": "stage1_manifest",
+      "label_unique": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ],
+      "label_source": "lbl_path",
+      "label_path": "C:\\Study\\Maroua\\TopBrain_Data_Release_Batches1n2_081425\\labelsTr_topbrain_ct\\topcow_ct_003.nii.gz",
+      "native_label_shape": [
+        281,
+        313,
+        182
+      ]
+    },
+    {
+      "patient_id": "004",
+      "shape": [
+        128,
+        128,
+        96
+      ],
+      "mask_n0_fg_voxels": 7306,
+      "label_fg_voxels": 6046,
+      "mask_recall_vs_gt": 0.737182,
+      "native_mask_shape": [
+        128,
+        128,
+        96
+      ],
+      "mask_source": "stage1_manifest",
+      "label_unique": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ],
+      "label_source": "lbl_path",
+      "label_path": "C:\\Study\\Maroua\\TopBrain_Data_Release_Batches1n2_081425\\labelsTr_topbrain_ct\\topcow_ct_004.nii.gz",
+      "native_label_shape": [
+        351,
+        431,
+        224
+      ]
+    },
+    {
+      "patient_id": "005",
+      "shape": [
+        128,
+        128,
+        96
+      ],
+      "mask_n0_fg_voxels": 7832,
+      "label_fg_voxels": 7098,
+      "mask_recall_vs_gt": 0.683009,
+      "native_mask_shape": [
+        128,
+        128,
+        96
+      ],
+      "mask_source": "stage1_manifest",
+      "label_unique": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ],
+      "label_source": "lbl_path",
+      "label_path": "C:\\Study\\Maroua\\TopBrain_Data_Release_Batches1n2_081425\\labelsTr_topbrain_ct\\topcow_ct_005.nii.gz",
+      "native_label_shape": [
+        332,
+        417,
+        184
+      ]
+    },
+    {
+      "patient_id": "006",
+      "shape": [
+        128,
+        128,
+        96
+      ],
+      "mask_n0_fg_voxels": 4667,
+      "label_fg_voxels": 3566,
+      "mask_recall_vs_gt": 0.735558,
+      "native_mask_shape": [
+        128,
+        128,
+        96
+      ],
+      "mask_source": "stage1_manifest",
+      "label_unique": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ],
+      "label_source": "lbl_path",
+      "label_path": "C:\\Study\\Maroua\\TopBrain_Data_Release_Batches1n2_081425\\labelsTr_topbrain_ct\\topcow_ct_006.nii.gz",
+      "native_label_shape": [
+        286,
+        369,
+        216
+      ]
+    },
+    {
+      "patient_id": "007",
+      "shape": [
+        128,
+        128,
+        96
+      ],
+      "mask_n0_fg_voxels": 5165,
+      "label_fg_voxels": 4635,
+      "mask_recall_vs_gt": 0.686947,
+      "native_mask_shape": [
+        128,
+        128,
+        96
+      ],
+      "mask_source": "stage1_manifest",
+      "label_unique": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ],
+      "label_source": "lbl_path",
+      "label_path": "C:\\Study\\Maroua\\TopBrain_Data_Release_Batches1n2_081425\\labelsTr_topbrain_ct\\topcow_ct_007.nii.gz",
+      "native_label_shape": [
+        258,
+        321,
+        208
+      ]
+    },
+    {
+      "patient_id": "008",
+      "shape": [
+        128,
+        128,
+        96
+      ],
+      "mask_n0_fg_voxels": 4846,
+      "label_fg_voxels": 4154,
+      "mask_recall_vs_gt": 0.666105,
+      "native_mask_shape": [
+        128,
+        128,
+        96
+      ],
+      "mask_source": "stage1_manifest",
+      "label_unique": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ],
+      "label_source": "lbl_path",
+      "label_path": "C:\\Study\\Maroua\\TopBrain_Data_Release_Batches1n2_081425\\labelsTr_topbrain_ct\\topcow_ct_008.nii.gz",
+      "native_label_shape": [
+        270,
+        338,
+        204
+      ]
+    },
+    {
+      "patient_id": "010",
+      "shape": [
+        128,
+        128,
+        96
+      ],
+      "mask_n0_fg_voxels": 6655,
+      "label_fg_voxels": 3855,
+      "mask_recall_vs_gt": 0.733593,
+      "native_mask_shape": [
+        128,
+        128,
+        96
+      ],
+      "mask_source": "stage1_manifest",
+      "label_unique": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ],
+      "label_source": "lbl_path",
+      "label_path": "C:\\Study\\Maroua\\TopBrain_Data_Release_Batches1n2_081425\\labelsTr_topbrain_ct\\topcow_ct_010.nii.gz",
+      "native_label_shape": [
+        295,
+        386,
+        196
+      ]
+    },
+    {
+      "patient_id": "011",
+      "shape": [
+        128,
+        128,
+        96
+      ],
+      "mask_n0_fg_voxels": 8277,
+      "label_fg_voxels": 6453,
+      "mask_recall_vs_gt": 0.742755,
+      "native_mask_shape": [
+        128,
+        128,
+        96
+      ],
+      "mask_source": "stage1_manifest",
+      "label_unique": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ],
+      "label_source": "lbl_path",
+      "label_path": "C:\\Study\\Maroua\\TopBrain_Data_Release_Batches1n2_081425\\labelsTr_topbrain_ct\\topcow_ct_011.nii.gz",
+      "native_label_shape": [
+        269,
+        334,
+        295
+      ]
+    },
+    {
+      "patient_id": "012",
+      "shape": [
+        128,
+        128,
+        96
+      ],
+      "mask_n0_fg_voxels": 9814,
+      "label_fg_voxels": 7350,
+      "mask_recall_vs_gt": 0.752109,
+      "native_mask_shape": [
+        128,
+        128,
+        96
+      ],
+      "mask_source": "stage1_manifest",
+      "label_unique": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ],
+      "label_source": "lbl_path",
+      "label_path": "C:\\Study\\Maroua\\TopBrain_Data_Release_Batches1n2_081425\\labelsTr_topbrain_ct\\topcow_ct_012.nii.gz",
+      "native_label_shape": [
+        266,
+        371,
+        311
+      ]
+    },
+    {
+      "patient_id": "013",
+      "shape": [
+        128,
+        128,
+        96
+      ],
+      "mask_n0_fg_voxels": 7367,
+      "label_fg_voxels": 5292,
+      "mask_recall_vs_gt": 0.722789,
+      "native_mask_shape": [
+        128,
+        128,
+        96
+      ],
+      "mask_source": "stage1_manifest",
+      "label_unique": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ],
+      "label_source": "lbl_path",
+      "label_path": "C:\\Study\\Maroua\\TopBrain_Data_Release_Batches1n2_081425\\labelsTr_topbrain_ct\\topcow_ct_013.nii.gz",
+      "native_label_shape": [
+        326,
+        433,
+        168
+      ]
+    },
+    {
+      "patient_id": "014",
+      "shape": [
+        128,
+        128,
+        96
+      ],
+      "mask_n0_fg_voxels": 8568,
+      "label_fg_voxels": 6449,
+      "mask_recall_vs_gt": 0.694216,
+      "native_mask_shape": [
+        128,
+        128,
+        96
+      ],
+      "mask_source": "stage1_manifest",
+      "label_unique": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ],
+      "label_source": "lbl_path",
+      "label_path": "C:\\Study\\Maroua\\TopBrain_Data_Release_Batches1n2_081425\\labelsTr_topbrain_ct\\topcow_ct_014.nii.gz",
+      "native_label_shape": [
+        247,
+        328,
+        211
+      ]
+    },
+    {
+      "patient_id": "015",
+      "shape": [
+        128,
+        128,
+        96
+      ],
+      "mask_n0_fg_voxels": 6323,
+      "label_fg_voxels": 4407,
+      "mask_recall_vs_gt": 0.674609,
+      "native_mask_shape": [
+        128,
+        128,
+        96
+      ],
+      "mask_source": "stage1_manifest",
+      "label_unique": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ],
+      "label_source": "lbl_path",
+      "label_path": "C:\\Study\\Maroua\\TopBrain_Data_Release_Batches1n2_081425\\labelsTr_topbrain_ct\\topcow_ct_015.nii.gz",
+      "native_label_shape": [
+        316,
+        390,
+        203
+      ]
+    },
+    {
+      "patient_id": "016",
+      "shape": [
+        128,
+        128,
+        96
+      ],
+      "mask_n0_fg_voxels": 5320,
+      "label_fg_voxels": 4067,
+      "mask_recall_vs_gt": 0.673469,
+      "native_mask_shape": [
+        128,
+        128,
+        96
+      ],
+      "mask_source": "stage1_manifest",
+      "label_unique": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ],
+      "label_source": "lbl_path",
+      "label_path": "C:\\Study\\Maroua\\TopBrain_Data_Release_Batches1n2_081425\\labelsTr_topbrain_ct\\topcow_ct_016.nii.gz",
+      "native_label_shape": [
+        306,
+        365,
+        182
+      ]
+    },
+    {
+      "patient_id": "017",
+      "shape": [
+        128,
+        128,
+        96
+      ],
+      "mask_n0_fg_voxels": 9400,
+      "label_fg_voxels": 5040,
+      "mask_recall_vs_gt": 0.76746,
+      "native_mask_shape": [
+        128,
+        128,
+        96
+      ],
+      "mask_source": "stage1_manifest",
+      "label_unique": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ],
+      "label_source": "lbl_path",
+      "label_path": "C:\\Study\\Maroua\\TopBrain_Data_Release_Batches1n2_081425\\labelsTr_topbrain_ct\\topcow_ct_017.nii.gz",
+      "native_label_shape": [
+        319,
+        430,
+        527
+      ]
+    },
+    {
+      "patient_id": "018",
+      "shape": [
+        128,
+        128,
+        96
+      ],
+      "mask_n0_fg_voxels": 6558,
+      "label_fg_voxels": 4513,
+      "mask_recall_vs_gt": 0.73809,
+      "native_mask_shape": [
+        128,
+        128,
+        96
+      ],
+      "mask_source": "stage1_manifest",
+      "label_unique": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ],
+      "label_source": "lbl_path",
+      "label_path": "C:\\Study\\Maroua\\TopBrain_Data_Release_Batches1n2_081425\\labelsTr_topbrain_ct\\topcow_ct_018.nii.gz",
+      "native_label_shape": [
+        286,
+        379,
+        202
+      ]
+    },
+    {
+      "patient_id": "020",
+      "shape": [
+        128,
+        128,
+        96
+      ],
+      "mask_n0_fg_voxels": 6563,
+      "label_fg_voxels": 5608,
+      "mask_recall_vs_gt": 0.758559,
+      "native_mask_shape": [
+        128,
+        128,
+        96
+      ],
+      "mask_source": "stage1_manifest",
+      "label_unique": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ],
+      "label_source": "lbl_path",
+      "label_path": "C:\\Study\\Maroua\\TopBrain_Data_Release_Batches1n2_081425\\labelsTr_topbrain_ct\\topcow_ct_020.nii.gz",
+      "native_label_shape": [
+        290,
+        387,
+        200
+      ]
+    },
+    {
+      "patient_id": "021",
+      "shape": [
+        128,
+        128,
+        96
+      ],
+      "mask_n0_fg_voxels": 7456,
+      "label_fg_voxels": 7963,
+      "mask_recall_vs_gt": 0.682281,
+      "native_mask_shape": [
+        128,
+        128,
+        96
+      ],
+      "mask_source": "stage1_manifest",
+      "label_unique": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ],
+      "label_source": "lbl_path",
+      "label_path": "C:\\Study\\Maroua\\TopBrain_Data_Release_Batches1n2_081425\\labelsTr_topbrain_ct\\topcow_ct_021.nii.gz",
+      "native_label_shape": [
+        275,
+        345,
+        205
+      ]
+    },
+    {
+      "patient_id": "022",
+      "shape": [
+        128,
+        128,
+        96
+      ],
+      "mask_n0_fg_voxels": 11114,
+      "label_fg_voxels": 8108,
+      "mask_recall_vs_gt": 0.794771,
+      "native_mask_shape": [
+        128,
+        128,
+        96
+      ],
+      "mask_source": "stage1_manifest",
+      "label_unique": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ],
+      "label_source": "lbl_path",
+      "label_path": "C:\\Study\\Maroua\\TopBrain_Data_Release_Batches1n2_081425\\labelsTr_topbrain_ct\\topcow_ct_022.nii.gz",
+      "native_label_shape": [
+        287,
+        351,
+        224
+      ]
+    },
+    {
+      "patient_id": "023",
+      "shape": [
+        128,
+        128,
+        96
+      ],
+      "mask_n0_fg_voxels": 4432,
+      "label_fg_voxels": 4440,
+      "mask_recall_vs_gt": 0.665766,
+      "native_mask_shape": [
+        128,
+        128,
+        96
+      ],
+      "mask_source": "stage1_manifest",
+      "label_unique": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ],
+      "label_source": "lbl_path",
+      "label_path": "C:\\Study\\Maroua\\TopBrain_Data_Release_Batches1n2_081425\\labelsTr_topbrain_ct\\topcow_ct_023.nii.gz",
+      "native_label_shape": [
+        338,
+        396,
+        204
+      ]
+    },
+    {
+      "patient_id": "024",
+      "shape": [
+        128,
+        128,
+        96
+      ],
+      "mask_n0_fg_voxels": 10344,
+      "label_fg_voxels": 6049,
+      "mask_recall_vs_gt": 0.76525,
+      "native_mask_shape": [
+        128,
+        128,
+        96
+      ],
+      "mask_source": "stage1_manifest",
+      "label_unique": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ],
+      "label_source": "lbl_path",
+      "label_path": "C:\\Study\\Maroua\\TopBrain_Data_Release_Batches1n2_081425\\labelsTr_topbrain_ct\\topcow_ct_024.nii.gz",
+      "native_label_shape": [
+        300,
+        366,
+        223
+      ]
+    },
+    {
+      "patient_id": "025",
+      "shape": [
+        128,
+        128,
+        96
+      ],
+      "mask_n0_fg_voxels": 7087,
+      "label_fg_voxels": 6231,
+      "mask_recall_vs_gt": 0.736639,
+      "native_mask_shape": [
+        128,
+        128,
+        96
+      ],
+      "mask_source": "stage1_manifest",
+      "label_unique": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ],
+      "label_source": "lbl_path",
+      "label_path": "C:\\Study\\Maroua\\TopBrain_Data_Release_Batches1n2_081425\\labelsTr_topbrain_ct\\topcow_ct_025.nii.gz",
+      "native_label_shape": [
+        271,
+        340,
+        206
+      ]
+    },
+    {
+      "patient_id": "026",
+      "shape": [
+        128,
+        128,
+        96
+      ],
+      "mask_n0_fg_voxels": 9857,
+      "label_fg_voxels": 8024,
+      "mask_recall_vs_gt": 0.758848,
+      "native_mask_shape": [
+        128,
+        128,
+        96
+      ],
+      "mask_source": "stage1_manifest",
+      "label_unique": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        7
+      ],
+      "label_source": "lbl_path",
+      "label_path": "C:\\Study\\Maroua\\TopBrain_Data_Release_Batches1n2_081425\\labelsTr_topbrain_ct\\topcow_ct_026.nii.gz",
+      "native_label_shape": [
+        274,
+        316,
+        214
+      ]
+    },
+    {
+      "patient_id": "027",
+      "shape": [
+        128,
+        128,
+        96
+      ],
+      "mask_n0_fg_voxels": 5190,
+      "label_fg_voxels": 5339,
+      "mask_recall_vs_gt": 0.712493,
+      "native_mask_shape": [
+        128,
+        128,
+        96
+      ],
+      "mask_source": "stage1_manifest",
+      "label_unique": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7
+      ],
+      "label_source": "lbl_path",
+      "label_path": "C:\\Study\\Maroua\\TopBrain_Data_Release_Batches1n2_081425\\labelsTr_topbrain_ct\\topcow_ct_027.nii.gz",
+      "native_label_shape": [
+        275,
+        360,
+        212
+      ]
+    }
+  ]
+}

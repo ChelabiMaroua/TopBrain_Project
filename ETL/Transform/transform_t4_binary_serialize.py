@@ -27,13 +27,14 @@ def serialize_binary(img: np.ndarray, lbl: np.ndarray) -> Dict[str, Any]:
         {
             "shape": [H, W, D],
             "image_dtype": "float32",
-            "label_dtype": "int64",
+            "label_dtype": "uint8",
             "image_data": <bytes>,
             "label_data": <bytes>,
         }
     """
     img_arr = np.ascontiguousarray(img.astype(np.float32, copy=False))
-    lbl_arr = np.ascontiguousarray(lbl.astype(np.int64, copy=False))
+    # uint8 suffit pour les labels 0-40 (max BSON 16 MB : float32 img ~6 MB + uint8 lbl ~1.5 MB = 7.5 MB)
+    lbl_arr = np.ascontiguousarray(lbl.astype(np.uint8, copy=False))
 
     if img_arr.ndim != 3 or lbl_arr.ndim != 3:
         raise ValueError(f"Expected 3D arrays, got img.ndim={img_arr.ndim}, lbl.ndim={lbl_arr.ndim}")
