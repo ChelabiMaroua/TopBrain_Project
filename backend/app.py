@@ -47,9 +47,9 @@ from inference_pipeline import TopBrainPipeline  # noqa: E402
 # ---------------------------------------------------------------------------
 # Configuration par défaut — peut être surchargé via CLI ou variables d'env
 # ---------------------------------------------------------------------------
-DEFAULT_CKPT_STAGE1 = str(ROOT / "4_Unet3D/checkpoints/stage1_binary_v2/swinunetr_best_fold_1.pth")
-DEFAULT_CKPT_STAGE2 = str(ROOT / "5_HierarchicalSeg/checkpoints/stage3_level2_v2/swinunetr_level2_best_fold_1.pth")
-DEFAULT_CKPT_STAGE3 = str(ROOT / "5_HierarchicalSeg/checkpoints/stage3_fine_v1/swinunetr_level2_best_fold_1.pth")
+DEFAULT_CKPT_STAGE1 = str(ROOT / "4_Unet3D/checkpoints/stage1_binary_96/swinunetr_best_fold_1.pth")
+DEFAULT_CKPT_STAGE2 = str(ROOT / "5_HierarchicalSeg/checkpoints/stage2_level1_96/swinunetr_level1_best_fold_1.pth")
+DEFAULT_CKPT_STAGE3 = str(ROOT / "5_HierarchicalSeg/checkpoints/stage3_fine_96/swinunetr_level2_best_fold_1.pth")
 DEFAULT_UPLOAD_DIR  = str(ROOT / "results" / "flask_uploads")
 DEFAULT_OUTPUT_DIR  = str(ROOT / "results" / "flask_outputs")
 MAX_FILE_MB         = 512
